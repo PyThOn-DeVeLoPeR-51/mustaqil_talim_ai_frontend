@@ -1,4 +1,4 @@
-import { api, setCookie, setStudentToken, setTeacherToken } from "@/lib/api";
+import { api, setStudentToken, setTeacherToken } from "@/lib/api";
 import type {
   LoginStudentResponse,
   LoginTeacherResponse,
@@ -6,16 +6,8 @@ import type {
   Teacher,
 } from "@/types/api";
 
-export async function registerTeacher(data: {
-  first_name: string;
-  last_name: string;
-  email: string;
-  password: string;
-  position?: string;
-  university?: string;
-}): Promise<Teacher> {
-  const res = await api.post("/auth/teacher/register", data);
-  return res.data;
+function setCookie(name: string, value: string) {
+  document.cookie = `${name}=${value}; path=/; max-age=86400; SameSite=Lax`;
 }
 
 export async function loginTeacher(data: {
@@ -24,10 +16,9 @@ export async function loginTeacher(data: {
 }): Promise<LoginTeacherResponse> {
   const res = await api.post("/auth/teacher/login", data);
 
-  // Muhim: student tokenni o‘chirmaymiz. Bir browserda teacher va student oynalari parallel ishlashi mumkin.
+  // Student tokenni o‘chirmaymiz!
   setTeacherToken(res.data.access_token);
   setCookie("mt_teacher_auth", "1");
-  setCookie("mt_teacher_login", res.data.teacher.email);
 
   return res.data;
 }
@@ -38,10 +29,9 @@ export async function loginStudent(data: {
 }): Promise<LoginStudentResponse> {
   const res = await api.post("/auth/student/login", data);
 
-  // Muhim: teacher tokenni o‘chirmaymiz. Aks holda teacher oynasi refresh bo‘lganda auth yo‘qoladi.
+  // Teacher tokenni o‘chirmaymiz!
   setStudentToken(res.data.access_token);
   setCookie("mt_student_auth", "1");
-  setCookie("mt_student_login", res.data.student.login);
 
   return res.data;
 }
