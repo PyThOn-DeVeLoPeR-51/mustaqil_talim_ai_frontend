@@ -10,7 +10,9 @@ export function middleware(req: NextRequest) {
     path.startsWith("/tasks") ||
     path.startsWith("/submissions");
 
-  const isStudentArea = path.startsWith("/student");
+  // Muhim: /students bilan adashmasligi uchun aniq tekshiramiz
+  const isStudentArea =
+    path === "/student" || path.startsWith("/student/");
 
   const hasTeacherAuth = req.cookies.get("mt_teacher_auth")?.value === "1";
   const hasStudentAuth = req.cookies.get("mt_student_auth")?.value === "1";
