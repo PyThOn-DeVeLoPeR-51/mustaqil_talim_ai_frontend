@@ -56,6 +56,34 @@ export function setStudentToken(token: string) {
   localStorage.setItem("student_token", token);
 }
 
+export function setCookie(name: string, value: string) {
+  if (typeof window === "undefined") return;
+  document.cookie = `${name}=${value}; path=/; max-age=86400; SameSite=Lax`;
+}
+
+export function clearTeacherAuth() {
+  if (typeof window === "undefined") return;
+
+  localStorage.removeItem("teacher_token");
+  document.cookie =
+    "mt_teacher_auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
+}
+
+export function clearStudentAuth() {
+  if (typeof window === "undefined") return;
+
+  localStorage.removeItem("student_token");
+  document.cookie =
+    "mt_student_auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
+}
+
+export function clearAuthTokens() {
+  if (typeof window === "undefined") return;
+
+  clearTeacherAuth();
+  clearStudentAuth();
+}
+
 export function teacherAuthHeaders() {
   const token = getTeacherToken();
 
