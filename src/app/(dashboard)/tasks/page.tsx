@@ -48,19 +48,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { getFileUrl } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/error";
 import type { ResultRead, Student, TaskMode, TaskRead } from "@/types/api";
 
 type TaskFilter = "all" | "active" | "inactive" | "etalon" | "optional";
@@ -86,11 +80,6 @@ function modeBadgeVariant(mode: TaskMode | string) {
   return mode === "etalon" ? "default" : "secondary";
 }
 
-function statusLabel(status: string) {
-  if (status === "evaluated") return "Baholandi";
-  if (status === "failed") return "Xatolik";
-  return "Kutilmoqda";
-}
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
@@ -255,7 +244,6 @@ export default function TasksPage() {
     const s = q.trim().toLowerCase();
 
     return tasks.filter((task) => {
-      const stats = statsByTask.get(task.id);
       const assignedNames = (task.assigned_student_ids || [])
         .map((id) => studentMap.get(id)?.full_name || "")
         .join(" ")
@@ -280,7 +268,7 @@ export default function TasksPage() {
 
       return matchesSearch && matchesFilter;
     });
-  }, [tasks, q, filter, statsByTask, studentMap]);
+  }, [tasks, q, filter, studentMap]);
 
   const summary = useMemo(() => {
     const evaluated = results.filter((item) => item.status === "evaluated" && typeof item.total_score === "number");
@@ -373,9 +361,9 @@ export default function TasksPage() {
       setOpen(false);
       resetCreateForm();
       await reload();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      toast.error(error?.response?.data?.detail || "Topshiriq yaratishda xatolik bor");
+      toast.error(getApiErrorMessage(error, "Topshiriq yaratishda xatolik bor"));
     } finally {
       setSaving(false);
     }
@@ -405,9 +393,9 @@ export default function TasksPage() {
       setEditOpen(false);
       setEditing(null);
       await reload();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      toast.error(error?.response?.data?.detail || "Topshiriqni yangilashda xatolik");
+      toast.error(getApiErrorMessage(error, "Topshiriqni yangilashda xatolik"));
     } finally {
       setSavingEdit(false);
     }
@@ -422,9 +410,9 @@ export default function TasksPage() {
         setSelectedTask(null);
       }
       await reload();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      toast.error(error?.response?.data?.detail || "Topshiriqni o‘chirishda xatolik");
+      toast.error(getApiErrorMessage(error, "Topshiriqni o‘chirishda xatolik"));
     }
   }
 

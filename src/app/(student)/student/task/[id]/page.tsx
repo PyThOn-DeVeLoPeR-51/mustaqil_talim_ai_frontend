@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getFileUrl } from "@/lib/api";
+import { getApiErrorMessage } from "@/lib/error";
 import type { ResultRead, TaskRead } from "@/types/api";
 
 function modeLabel(mode?: string) {
@@ -259,9 +260,9 @@ export default function StudentTaskDetailPage() {
       setSelectedFile(null);
       setActiveAttempt(result.attempt_number);
       await reload();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      toast.error(error?.response?.data?.detail || "Chizmani yuklashda xatolik");
+      toast.error(getApiErrorMessage(error, "Chizmani yuklashda xatolik"));
     } finally {
       setUploading(false);
     }

@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Bot, ClipboardList, Home } from "lucide-react";
 
 import { getStudentMe } from "@/api/auth";
 import { StudentGuard } from "@/components/guards/StudentGuard";
@@ -10,9 +12,17 @@ import { BackendStatusBadge } from "@/components/system/backend-status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getStudentToken } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type { Student } from "@/types/api";
 
+const studentNav = [
+  { href: "/student", label: "Bosh sahifa", icon: Home },
+  { href: "/student/tasks", label: "Topshiriqlar", icon: ClipboardList },
+  { href: "/student/mentor", label: "AI Mentor", icon: Bot },
+];
+
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [me, setMe] = useState<Student | null>(null);
 
   useEffect(() => {
@@ -30,7 +40,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
     <StudentGuard>
       <div className="min-h-screen bg-muted/30">
         <header className="border-b bg-background">
-          <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <span>Mustaqil ta’lim • Talaba paneli</span>
@@ -59,15 +69,24 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             </div>
 
             <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <Button asChild variant="outline">
-                <Link href="/student/tasks">Topshiriqlar</Link>
-              </Button>
+              {studentNav.map((item) => {
+                const Icon = item.icon;
+                const active = pathname === item.href || (item.href !== "/student" && pathname.startsWith(`${item.href}/`));
+                return (
+                  <Button key={item.href} asChild variant={active ? "default" : "outline"} size="sm">
+                    <Link href={item.href}>
+                      <Icon className="mr-2 h-4 w-4" />
+                      {item.label}
+                    </Link>
+                  </Button>
+                );
+              })}
               <LogoutButton redirectTo="/login" role="student" />
             </div>
           </div>
         </header>
 
-        <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+        <main className={cn("mx-auto max-w-7xl px-4 py-6", pathname === "/student/mentor" && "max-w-[1500px]")}>{children}</main>
       </div>
     </StudentGuard>
   );

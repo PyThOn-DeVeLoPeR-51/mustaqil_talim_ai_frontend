@@ -2,21 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BarChart3, ClipboardList, FileCheck2, LayoutDashboard, Users } from "lucide-react";
+
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 
 const nav = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/students", label: "Talabalar" },
-  { href: "/tasks", label: "Topshiriqlar" },
-  { href: "/submissions", label: "Natijalar" },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/students", label: "Talabalar", icon: Users },
+  { href: "/tasks", label: "Topshiriqlar", icon: ClipboardList },
+  { href: "/submissions", label: "Natijalar", icon: FileCheck2 },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
 
 export function AppSidebar() {
   const pathname = usePathname();
 
   return (
-    <div className="rounded-xl border bg-background p-4 shadow-sm">
+    <div className="sticky top-6 rounded-xl border bg-background p-4 shadow-sm">
       <div className="mb-4">
         <div className="text-sm text-muted-foreground">Mustaqil ta’lim</div>
         <div className="text-lg font-semibold">O‘qituvchi kabineti</div>
@@ -24,27 +26,29 @@ export function AppSidebar() {
 
       <div className="space-y-1">
         {nav.map((item) => {
-          const active = pathname === item.href;
+          const Icon = item.icon;
+          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+
           return (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center justify-between rounded-lg px-3 py-2 text-sm transition",
+                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition",
                 active
                   ? "bg-primary text-primary-foreground"
-                  : "hover:bg-muted text-foreground"
+                  : "text-foreground hover:bg-muted"
               )}
             >
+              <Icon className="h-4 w-4 shrink-0" />
               <span>{item.label}</span>
-              {item.href === "/submissions" && <Badge variant="secondary">2</Badge>}
             </Link>
           );
         })}
       </div>
 
-      <div className="mt-6 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
-        Etalon/Ixtiyoriy rejim, 2 ta urinish limit.
+      <div className="mt-6 rounded-lg bg-muted/50 p-3 text-xs leading-5 text-muted-foreground">
+        Etalon va ixtiyoriy rejim, ikki urinish hamda tajriba-sinov monitoringi.
       </div>
     </div>
   );
