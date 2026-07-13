@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, BarChart3, RefreshCw, Target, TrendingUp, Users } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, BarChart3, CircleOff, RefreshCw, Target, TrendingUp, Users } from "lucide-react";
 
 import { ChartCard } from "@/components/analytics/chart-card";
 import {
@@ -109,25 +109,38 @@ export default function AnalyticsPage() {
     });
   }, [experimentType, group, studentId, taskMode]);
 
-  const scope = filtered.length ? filtered : students;
+  const scope = filtered;
+  const hasResults = scope.length > 0;
   const scopeSeries = averageSeries(scope);
   const allSeries = averageSeries(students);
   const initialAverage = average(scope.map((item) => item.scores[0]));
   const finalAverage = average(scope.map((item) => item.scores[5]));
   const growth = finalAverage - initialAverage;
   const secondAttemptGrowth = average(scope.map((item) => item.secondAttempt - item.firstAttempt));
-  const successRate = (scope.filter((item) => item.scores[5] >= 71).length / scope.length) * 100;
+  const successRate = hasResults
+    ? (scope.filter((item) => item.scores[5] >= 71).length / scope.length) * 100
+    : 0;
 
   const groupComparison = useMemo(() => {
-    return groups.map((groupName) => {
-      const rows = students.filter((item) => item.group === groupName);
-      return {
-        label: groupName,
-        before: average(rows.map((item) => item.scores[0])),
-        after: average(rows.map((item) => item.scores[5])),
-      };
+    const comparisonRows = students.filter((item) => {
+      if (experimentType !== "all" && item.experimentType !== experimentType) return false;
+      if (taskMode !== "all" && item.taskMode !== taskMode) return false;
+      return true;
     });
-  }, [groups]);
+
+    return groups
+      .map((groupName) => {
+        const rows = comparisonRows.filter((item) => item.group === groupName);
+        return {
+          label: groupName,
+          before: average(rows.map((item) => item.scores[0])),
+          after: average(rows.map((item) => item.scores[5])),
+          count: rows.length,
+        };
+      })
+      .filter((item) => item.count > 0)
+      .map(({ label, before, after }) => ({ label, before, after }));
+  }, [experimentType, groups, taskMode]);
 
   const distribution = [
     { label: "Yuqori (86–100)", value: scope.filter((item) => item.scores[5] >= 86).length, color: "#16a34a" },
@@ -223,6 +236,22 @@ export default function AnalyticsPage() {
         </CardContent>
       </Card>
 
+      {!hasResults ? (
+        <Card className="border-dashed shadow-sm">
+          <CardContent className="flex min-h-64 flex-col items-center justify-center p-8 text-center">
+            <CircleOff className="h-10 w-10 text-muted-foreground" />
+            <h2 className="mt-4 text-lg font-semibold">Mos natija topilmadi</h2>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+              Tanlangan filtrlar bir-biriga mos kelmadi. Boshqa guruh, talaba yoki tajriba turini tanlang yoxud filtrlarni tozalang.
+            </p>
+            <Button type="button" variant="outline" className="mt-5" onClick={resetFilters}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Filtrlarni tozalash
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard title="Tanlangan talabalar" value={String(scope.length)} hint={scopeLabel} icon={<Users className="h-4 w-4" />} />
         <MetricCard title="Yakuniy o‘rtacha" value={`${finalAverage.toFixed(1)}/100`} hint={`Boshlang‘ich: ${initialAverage.toFixed(1)}`} icon={<Target className="h-4 w-4" />} positive={growth >= 0} />
@@ -306,6 +335,8 @@ export default function AnalyticsPage() {
       >
         <HeatmapChart id="student-heatmap-chart" rows={heatmapRows} columns={scoreLabels} />
       </ChartCard>
+        </>
+      )}
     </div>
   );
 }

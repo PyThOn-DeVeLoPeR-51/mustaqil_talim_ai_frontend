@@ -8,7 +8,8 @@ export function middleware(req: NextRequest) {
     path.startsWith("/dashboard") ||
     path.startsWith("/students") ||
     path.startsWith("/tasks") ||
-    path.startsWith("/submissions");
+    path.startsWith("/submissions") ||
+    path.startsWith("/analytics");
 
   // Muhim: /students bilan adashmasligi uchun aniq tekshiramiz
   const isStudentArea =
@@ -38,6 +39,7 @@ export const config = {
     "/students/:path*",
     "/tasks/:path*",
     "/submissions/:path*",
+    "/analytics/:path*",
     "/student/:path*",
   ],
 };

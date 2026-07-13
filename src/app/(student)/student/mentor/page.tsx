@@ -1,15 +1,17 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, Bot, CalendarDays, CheckCircle2, RotateCcw, Send, Sparkles, User } from "lucide-react";
 import { toast } from "sonner";
 
+import { getStudentMe } from "@/api/auth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
+import { getStudentToken } from "@/lib/api";
 
 type DiagnosticAnswers = {
   level: string;
@@ -33,16 +35,33 @@ type ChatMessage = {
   content: string;
 };
 
-const PLAN_STORAGE_KEY = "ai_mentor_monthly_plan_v1";
-const ANSWERS_STORAGE_KEY = "ai_mentor_diagnostic_answers_v1";
-const CHAT_STORAGE_KEY = "ai_mentor_chat_v1";
+const LEGACY_STORAGE_KEYS = [
+  "ai_mentor_monthly_plan_v1",
+  "ai_mentor_diagnostic_answers_v1",
+  "ai_mentor_chat_v1",
+];
+
+type MentorStorageKeys = {
+  plan: string;
+  answers: string;
+  chat: string;
+};
+
+function getMentorStorageKeys(studentId: number): MentorStorageKeys {
+  const prefix = `ai_mentor_student_${studentId}_v2`;
+  return {
+    plan: `${prefix}_monthly_plan`,
+    answers: `${prefix}_diagnostic_answers`,
+    chat: `${prefix}_chat`,
+  };
+}
 
 const initialAnswers: DiagnosticAnswers = {
-  level: "beginner",
-  weeklyHours: "5",
-  difficultTopic: "Proyeksion chizmachilik",
-  goal: "Chizmalarni standart talablar asosida mustaqil bajarish",
-  learningStyle: "practice",
+  level: "",
+  weeklyHours: "",
+  difficultTopic: "",
+  goal: "",
+  learningStyle: "",
 };
 
 const initialMessages: ChatMessage[] = [
@@ -53,6 +72,19 @@ const initialMessages: ChatMessage[] = [
       "Assalomu alaykum! Men AI Mentorman. Hozir frontend demo rejimida ishlayapman. Chizmachilik, mustaqil ta’lim rejasi yoki topshiriqlar bo‘yicha savolingizni yozishingiz mumkin.",
   },
 ];
+
+function readStoredJson<T>(key: string): T | null {
+  const raw = window.localStorage.getItem(key);
+  if (!raw) return null;
+
+  try {
+    return JSON.parse(raw) as T;
+  } catch (error) {
+    console.error(`AI Mentor local data parse error (${key}):`, error);
+    window.localStorage.removeItem(key);
+    return null;
+  }
+}
 
 function buildPlan(answers: DiagnosticAnswers): WeeklyPlan[] {
   const hours = Number(answers.weeklyHours) || 5;
@@ -137,23 +169,62 @@ export default function MentorPage() {
   const [plan, setPlan] = useState<WeeklyPlan[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [input, setInput] = useState("");
+  const [studentId, setStudentId] = useState<number | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      try {
-        const savedAnswers = window.localStorage.getItem(ANSWERS_STORAGE_KEY);
-        const savedPlan = window.localStorage.getItem(PLAN_STORAGE_KEY);
-        const savedChat = window.localStorage.getItem(CHAT_STORAGE_KEY);
-        if (savedAnswers) setAnswers(JSON.parse(savedAnswers) as DiagnosticAnswers);
-        if (savedPlan) setPlan(JSON.parse(savedPlan) as WeeklyPlan[]);
-        if (savedChat) setMessages(JSON.parse(savedChat) as ChatMessage[]);
-      } catch (error) {
-        console.error("AI Mentor local data load error:", error);
-      }
-    }, 0);
+    let cancelled = false;
 
-    return () => window.clearTimeout(timer);
+    async function loadStudentMentorData() {
+      const token = getStudentToken();
+      if (!token) return;
+
+      try {
+        const student = await getStudentMe(token);
+        if (cancelled) return;
+
+        const keys = getMentorStorageKeys(student.id);
+        const savedAnswers = readStoredJson<DiagnosticAnswers>(keys.answers);
+        const savedPlan = readStoredJson<WeeklyPlan[]>(keys.plan);
+        const savedChat = readStoredJson<ChatMessage[]>(keys.chat);
+
+        setStudentId(student.id);
+        setAnswers(savedAnswers ?? initialAnswers);
+        setPlan(Array.isArray(savedPlan) ? savedPlan : []);
+        setMessages(Array.isArray(savedChat) && savedChat.length > 0 ? savedChat : initialMessages);
+
+        // Old shared keys caused one student's plan to appear for another student.
+        // They are intentionally removed instead of migrated to an unknown account.
+        LEGACY_STORAGE_KEYS.forEach((key) => window.localStorage.removeItem(key));
+        setHydrated(true);
+      } catch (error) {
+        console.error("AI Mentor student data loading error:", error);
+        if (!cancelled) {
+          setAnswers(initialAnswers);
+          setPlan([]);
+          setMessages(initialMessages);
+          setHydrated(true);
+          toast.error("Talaba ma’lumotlarini yuklab bo‘lmadi. Sahifani yangilang.");
+        }
+      }
+    }
+
+    void loadStudentMentorData();
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  useEffect(() => {
+    if (!hydrated || studentId === null) return;
+    const keys = getMentorStorageKeys(studentId);
+    window.localStorage.setItem(keys.answers, JSON.stringify(answers));
+  }, [answers, hydrated, studentId]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages]);
 
   const completedProfile = useMemo(() => {
     const values = Object.values(answers);
@@ -165,16 +236,23 @@ export default function MentorPage() {
   }
 
   function generatePlan() {
+    if (studentId === null) {
+      toast.error("Talaba profili hali yuklanmadi. Birozdan so‘ng qayta urinib ko‘ring.");
+      return;
+    }
+
     const generated = buildPlan(answers);
+    const keys = getMentorStorageKeys(studentId);
     setPlan(generated);
-    window.localStorage.setItem(ANSWERS_STORAGE_KEY, JSON.stringify(answers));
-    window.localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(generated));
+    window.localStorage.setItem(keys.plan, JSON.stringify(generated));
     toast.success("Bir oylik mustaqil tayyorlanish rejasi yaratildi.");
   }
 
   function clearPlan() {
+    if (studentId === null) return;
+    const keys = getMentorStorageKeys(studentId);
     setPlan([]);
-    window.localStorage.removeItem(PLAN_STORAGE_KEY);
+    window.localStorage.removeItem(keys.plan);
     toast.success("Reja tozalandi.");
   }
 
@@ -191,12 +269,18 @@ export default function MentorPage() {
     ];
     setMessages(nextMessages);
     setInput("");
-    window.localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(nextMessages));
+    if (studentId !== null) {
+      const keys = getMentorStorageKeys(studentId);
+      window.localStorage.setItem(keys.chat, JSON.stringify(nextMessages));
+    }
   }
 
   function clearChat() {
     setMessages(initialMessages);
-    window.localStorage.removeItem(CHAT_STORAGE_KEY);
+    if (studentId !== null) {
+      const keys = getMentorStorageKeys(studentId);
+      window.localStorage.removeItem(keys.chat);
+    }
   }
 
   return (
@@ -231,6 +315,7 @@ export default function MentorPage() {
             <label className="block space-y-2 text-sm font-medium">
               <span>Hozirgi bilim darajangiz</span>
               <select className={selectClass} value={answers.level} onChange={(event) => updateAnswer("level", event.target.value)}>
+                <option value="" disabled>Darajani tanlang</option>
                 <option value="beginner">Boshlang‘ich</option>
                 <option value="intermediate">O‘rta</option>
                 <option value="advanced">Yuqori</option>
@@ -240,6 +325,7 @@ export default function MentorPage() {
             <label className="block space-y-2 text-sm font-medium">
               <span>Haftasiga ajratiladigan vaqt</span>
               <select className={selectClass} value={answers.weeklyHours} onChange={(event) => updateAnswer("weeklyHours", event.target.value)}>
+                <option value="" disabled>Vaqtni tanlang</option>
                 <option value="3">3 soatgacha</option>
                 <option value="5">4–6 soat</option>
                 <option value="8">7–9 soat</option>
@@ -260,6 +346,7 @@ export default function MentorPage() {
             <label className="block space-y-2 text-sm font-medium">
               <span>Qulay o‘rganish usuli</span>
               <select className={selectClass} value={answers.learningStyle} onChange={(event) => updateAnswer("learningStyle", event.target.value)}>
+                <option value="" disabled>Usulni tanlang</option>
                 <option value="practice">Amaliy mashqlar</option>
                 <option value="video">Video va ko‘rgazmali material</option>
                 <option value="reading">Matn va konspekt</option>
@@ -267,10 +354,13 @@ export default function MentorPage() {
               </select>
             </label>
 
-            <Button type="button" className="w-full" onClick={generatePlan}>
+            <Button type="button" className="w-full" onClick={generatePlan} disabled={!hydrated || studentId === null || completedProfile < 100}>
               <Sparkles className="mr-2 h-4 w-4" />
               Bir oylik reja yaratish
             </Button>
+            {completedProfile < 100 ? (
+              <p className="text-center text-xs text-muted-foreground">Reja yaratish uchun barcha savollarga javob bering.</p>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -374,6 +464,7 @@ export default function MentorPage() {
                 ) : null}
               </div>
             ))}
+            <div ref={chatEndRef} aria-hidden="true" />
           </div>
 
           <form onSubmit={sendMessage} className="flex gap-2 border-t bg-background p-4 sm:p-5">
