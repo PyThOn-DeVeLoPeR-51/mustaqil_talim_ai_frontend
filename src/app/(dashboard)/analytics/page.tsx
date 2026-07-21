@@ -28,6 +28,7 @@ import {
   GroupBarChart,
   HeatmapChart,
   LineProgressChart,
+  ModeBarChart,
   RadarChart,
 } from "@/components/analytics/charts";
 import { Badge } from "@/components/ui/badge";
@@ -179,10 +180,13 @@ export default function AnalyticsPage() {
     void loadAnalytics();
   }, [loadAnalytics, reloadKey]);
 
-  const studentOptions = useMemo(() => {
-    const students = analytics?.filters.students ?? baseline?.filters.students ?? [];
+  const allStudentOptions = useMemo(
+    () => baseline?.filters.students ?? analytics?.filters.students ?? [],
+    [analytics, baseline],
+  );
 
-    return students.filter((student) => {
+  const studentOptions = useMemo(() => {
+    return allStudentOptions.filter((student) => {
       if (group !== "all" && student.group_name !== group) return false;
       if (
         experimentType !== "all" &&
@@ -192,7 +196,7 @@ export default function AnalyticsPage() {
       }
       return true;
     });
-  }, [analytics, baseline, experimentType, group]);
+  }, [allStudentOptions, experimentType, group]);
 
   const scopeLabel = useMemo(() => {
     if (studentId !== "all") {
@@ -210,6 +214,43 @@ export default function AnalyticsPage() {
 
     return "Barcha talabalar";
   }, [experimentType, group, studentId, studentOptions, taskMode]);
+
+  function updateGroup(nextGroup: string) {
+    setGroup(nextGroup);
+
+    if (studentId === "all") return;
+
+    const selectedStudent = allStudentOptions.find(
+      (student) => student.id === Number(studentId),
+    );
+
+    if (
+      !selectedStudent ||
+      (nextGroup !== "all" && selectedStudent.group_name !== nextGroup)
+    ) {
+      setStudentId("all");
+    }
+  }
+
+  function updateExperimentType(
+    nextExperimentType: "all" | ExperimentGroup,
+  ) {
+    setExperimentType(nextExperimentType);
+
+    if (studentId === "all") return;
+
+    const selectedStudent = allStudentOptions.find(
+      (student) => student.id === Number(studentId),
+    );
+
+    if (
+      !selectedStudent ||
+      (nextExperimentType !== "all" &&
+        selectedStudent.experiment_group !== nextExperimentType)
+    ) {
+      setStudentId("all");
+    }
+  }
 
   function resetFilters() {
     setGroup("all");
@@ -332,10 +373,7 @@ export default function AnalyticsPage() {
             <select
               className={selectClass}
               value={group}
-              onChange={(event) => {
-                setGroup(event.target.value);
-                setStudentId("all");
-              }}
+              onChange={(event) => updateGroup(event.target.value)}
             >
               <option value="all">Barcha guruhlar</option>
               {filters.groups.map((item) => (
@@ -343,6 +381,23 @@ export default function AnalyticsPage() {
                   {item}
                 </option>
               ))}
+            </select>
+          </label>
+
+          <label className="space-y-2 text-sm font-medium">
+            <span>Tajriba-sinov turi</span>
+            <select
+              className={selectClass}
+              value={experimentType}
+              onChange={(event) =>
+                updateExperimentType(
+                  event.target.value as "all" | ExperimentGroup,
+                )
+              }
+            >
+              <option value="all">Barchasi</option>
+              <option value="experimental">Tajriba guruhi</option>
+              <option value="control">Nazorat guruhi</option>
             </select>
           </label>
 
@@ -359,24 +414,6 @@ export default function AnalyticsPage() {
                   {student.full_name}
                 </option>
               ))}
-            </select>
-          </label>
-
-          <label className="space-y-2 text-sm font-medium">
-            <span>Tajriba-sinov turi</span>
-            <select
-              className={selectClass}
-              value={experimentType}
-              onChange={(event) => {
-                setExperimentType(
-                  event.target.value as "all" | ExperimentGroup,
-                );
-                setStudentId("all");
-              }}
-            >
-              <option value="all">Barchasi</option>
-              <option value="experimental">Tajriba guruhi</option>
-              <option value="control">Nazorat guruhi</option>
             </select>
           </label>
 
@@ -481,6 +518,18 @@ export default function AnalyticsPage() {
               }
               mainLabel={scopeLabel}
               comparisonLabel={hasActiveFilters ? "Umumiy o‘rtacha" : undefined}
+            />
+          </ChartCard>
+
+          <ChartCard
+            title="Etalon va ixtiyoriy rejimlar natijasi"
+            description="Tanlangan talaba yoki guruhning har ikki baholash rejimidagi o‘rtacha ballari va baholangan natijalar soni."
+            chartId="mode-comparison-chart"
+            filename="etalon-ixtiyoriy-solishtiruvi"
+          >
+            <ModeBarChart
+              id="mode-comparison-chart"
+              data={analytics.mode_comparison}
             />
           </ChartCard>
 

@@ -118,6 +118,14 @@ export type AnalyticsDistributionItem = {
   value: number;
 };
 
+export type AnalyticsModeComparisonItem = {
+  mode: TaskMode;
+  label: string;
+  average: number | null;
+  evaluated_student_count: number;
+  evaluated_result_count: number;
+};
+
 export type AnalyticsCriteria = {
   labels: string[];
   values: Array<number | null>;
@@ -153,6 +161,7 @@ export type TeacherAnalyticsRead = {
   progress: AnalyticsProgress;
   group_comparison: AnalyticsGroupComparisonItem[];
   distribution: AnalyticsDistributionItem[];
+  mode_comparison: AnalyticsModeComparisonItem[];
   criteria: AnalyticsCriteria;
   heatmap: AnalyticsHeatmapRow[];
   filters: AnalyticsFilterOptions;

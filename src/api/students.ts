@@ -5,6 +5,9 @@ export async function createStudent(data: {
   university?: string;
   direction?: string;
   stage?: string;
+  group_name?: string;
+  experiment_group?: "experimental" | "control";
+  cohort_year?: number;
   login?: string;
   password?: string;
 }) {
@@ -38,8 +41,11 @@ export async function updateStudent(
     university?: string;
     direction?: string;
     stage?: string;
+    group_name?: string;
+    experiment_group?: "experimental" | "control" | null;
+    cohort_year?: number | null;
     is_active?: boolean;
-  }
+  },
 ) {
   const res = await api.patch(`/students/${studentId}`, data, {
     headers: teacherAuthHeaders(),

@@ -55,7 +55,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { getFileUrl } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/error";
-import type { ResultRead, Student, TaskMode, TaskRead } from "@/types/api";
+import type { AssessmentStage, ResultRead, Student, TaskMode, TaskRead } from "@/types/api";
 
 type TaskFilter = "all" | "active" | "inactive" | "etalon" | "optional";
 
@@ -71,6 +71,17 @@ type TaskStats = {
   progress: number;
   latestDate: string | null;
 };
+
+function defaultAcademicPeriod() {
+  const year = new Date().getFullYear();
+  return `${year}-${year + 1}`;
+}
+
+function assessmentStageLabel(stage?: AssessmentStage | null) {
+  if (stage === "pretest") return "Boshlang‘ich diagnostika";
+  if (stage === "posttest") return "Yakuniy nazorat";
+  return "Haftalik/oraliq topshiriq";
+}
 
 function modeLabel(mode: TaskMode | string) {
   return mode === "etalon" ? "Etalon" : "Ixtiyoriy";
@@ -215,6 +226,11 @@ export default function TasksPage() {
   const [mode, setMode] = useState<TaskMode>("etalon");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [topic, setTopic] = useState("");
+  const [weekNumber, setWeekNumber] = useState("1");
+  const [assessmentStage, setAssessmentStage] =
+    useState<AssessmentStage>("intermediate");
+  const [academicPeriod, setAcademicPeriod] = useState(defaultAcademicPeriod);
   const [deadline, setDeadline] = useState("");
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [instructionFile, setInstructionFile] = useState<File | null>(null);
@@ -225,6 +241,11 @@ export default function TasksPage() {
   const [editing, setEditing] = useState<TaskRead | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [editTopic, setEditTopic] = useState("");
+  const [editWeekNumber, setEditWeekNumber] = useState("");
+  const [editAssessmentStage, setEditAssessmentStage] =
+    useState<AssessmentStage>("intermediate");
+  const [editAcademicPeriod, setEditAcademicPeriod] = useState("");
   const [editActive, setEditActive] = useState(true);
   const [editAssignedIds, setEditAssignedIds] = useState<number[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -291,7 +312,18 @@ export default function TasksPage() {
     };
   }, [tasks, results]);
 
-  const canSave = title.trim().length >= 3 && (mode === "optional" || !!referenceFile);
+  const parsedWeekNumber = Number(weekNumber);
+  const hasValidWeek =
+    assessmentStage !== "intermediate" ||
+    (Number.isInteger(parsedWeekNumber) &&
+      parsedWeekNumber >= 1 &&
+      parsedWeekNumber <= 52);
+  const canSave =
+    title.trim().length >= 3 &&
+    topic.trim().length >= 2 &&
+    academicPeriod.trim().length >= 4 &&
+    hasValidWeek &&
+    (mode === "optional" || !!referenceFile);
 
   async function reload() {
     try {
@@ -335,6 +367,10 @@ export default function TasksPage() {
   function resetCreateForm() {
     setTitle("");
     setDescription("");
+    setTopic("");
+    setWeekNumber("1");
+    setAssessmentStage("intermediate");
+    setAcademicPeriod(defaultAcademicPeriod());
     setDeadline("");
     setMode("etalon");
     setReferenceFile(null);
@@ -350,6 +386,11 @@ export default function TasksPage() {
       await createTaskApi({
         title: title.trim(),
         description: description.trim() || undefined,
+        topic: topic.trim(),
+        week_number:
+          assessmentStage === "intermediate" ? parsedWeekNumber : undefined,
+        assessment_stage: assessmentStage,
+        academic_period: academicPeriod.trim(),
         mode,
         deadline: deadline ? new Date(deadline).toISOString() : undefined,
         assigned_student_ids: selectedStudentIds,
@@ -373,6 +414,10 @@ export default function TasksPage() {
     setEditing(task);
     setEditTitle(task.title);
     setEditDescription(task.description || "");
+    setEditTopic(task.topic || task.title);
+    setEditWeekNumber(task.week_number ? String(task.week_number) : "");
+    setEditAssessmentStage(task.assessment_stage || "intermediate");
+    setEditAcademicPeriod(task.academic_period || defaultAcademicPeriod());
     setEditActive(task.is_active);
     setEditAssignedIds(task.assigned_student_ids || []);
     setEditOpen(true);
@@ -386,6 +431,13 @@ export default function TasksPage() {
       await updateTaskApi(editing.id, {
         title: editTitle.trim(),
         description: editDescription.trim() || undefined,
+        topic: editTopic.trim() || undefined,
+        week_number:
+          editAssessmentStage === "intermediate" && editWeekNumber.trim()
+            ? Number(editWeekNumber)
+            : null,
+        assessment_stage: editAssessmentStage,
+        academic_period: editAcademicPeriod.trim() || null,
         is_active: editActive,
       });
       await assignStudentsToTask(editing.id, editAssignedIds);
@@ -457,6 +509,55 @@ export default function TasksPage() {
                       onChange={(e) => setTitle(e.target.value)}
                       placeholder="Masalan: Detal chizmasi"
                     />
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-2 md:col-span-2">
+                      <Label>Mavzu</Label>
+                      <Input
+                        value={topic}
+                        onChange={(e) => setTopic(e.target.value)}
+                        placeholder="Masalan: To‘g‘ri burchakli proyeksiyalar"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Baholash bosqichi</Label>
+                      <select
+                        className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                        value={assessmentStage}
+                        onChange={(e) =>
+                          setAssessmentStage(e.target.value as AssessmentStage)
+                        }
+                      >
+                        <option value="pretest">Boshlang‘ich diagnostika</option>
+                        <option value="intermediate">Haftalik/oraliq</option>
+                        <option value="posttest">Yakuniy nazorat</option>
+                      </select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label>Hafta raqami</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={52}
+                        value={weekNumber}
+                        disabled={assessmentStage !== "intermediate"}
+                        onChange={(e) => setWeekNumber(e.target.value)}
+                        placeholder="1"
+                      />
+                    </div>
+                    <div className="grid gap-2 md:col-span-2">
+                      <Label>Akademik davr</Label>
+                      <Input
+                        value={academicPeriod}
+                        onChange={(e) => setAcademicPeriod(e.target.value)}
+                        placeholder="2026-2027"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Ushbu ma’lumotlar Analytics chartlarida davr va hafta
+                        bo‘yicha dinamikani to‘g‘ri chiqaradi.
+                      </p>
+                    </div>
                   </div>
 
                   <div className="grid gap-2">
@@ -655,6 +756,48 @@ export default function TasksPage() {
             <div className="grid gap-2">
               <Label>Izoh</Label>
               <Textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-2 md:col-span-2">
+                <Label>Mavzu</Label>
+                <Input
+                  value={editTopic}
+                  onChange={(e) => setEditTopic(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label>Baholash bosqichi</Label>
+                <select
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  value={editAssessmentStage}
+                  onChange={(e) =>
+                    setEditAssessmentStage(e.target.value as AssessmentStage)
+                  }
+                >
+                  <option value="pretest">Boshlang‘ich diagnostika</option>
+                  <option value="intermediate">Haftalik/oraliq</option>
+                  <option value="posttest">Yakuniy nazorat</option>
+                </select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Hafta raqami</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={52}
+                  value={editWeekNumber}
+                  disabled={editAssessmentStage !== "intermediate"}
+                  onChange={(e) => setEditWeekNumber(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2 md:col-span-2">
+                <Label>Akademik davr</Label>
+                <Input
+                  value={editAcademicPeriod}
+                  onChange={(e) => setEditAcademicPeriod(e.target.value)}
+                />
+              </div>
             </div>
 
             <label className="flex items-center gap-2 text-sm">
@@ -1018,6 +1161,12 @@ export default function TasksPage() {
 
                         <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
                           <span>Yaratildi: {formatDate(task.created_at)}</span>
+                          <span>Mavzu: {task.topic || "—"}</span>
+                          <span>Davr: {task.academic_period || "—"}</span>
+                          <span>
+                            {assessmentStageLabel(task.assessment_stage)}
+                            {task.week_number ? ` • ${task.week_number}-hafta` : ""}
+                          </span>
                           <span>•</span>
                           <span className={deadlineInfo.overdue ? "font-medium text-destructive" : ""}>Muddat: {deadlineInfo.label}</span>
                           {stats.latestDate ? (

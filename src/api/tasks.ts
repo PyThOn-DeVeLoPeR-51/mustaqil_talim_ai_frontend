@@ -1,10 +1,14 @@
 import { api, studentAuthHeaders, teacherAuthHeaders } from "@/lib/api";
-import type { TaskMode, TaskRead } from "@/types/api";
+import type { AssessmentStage, TaskMode, TaskRead } from "@/types/api";
 
 export async function createTask(data: {
   title: string;
   mode: TaskMode;
   description?: string;
+  topic?: string;
+  week_number?: number;
+  assessment_stage?: AssessmentStage;
+  academic_period?: string;
   deadline?: string;
   assigned_student_ids?: number[];
   reference_file?: File | null;
@@ -17,6 +21,22 @@ export async function createTask(data: {
 
   if (data.description) {
     formData.append("description", data.description);
+  }
+
+  if (data.topic) {
+    formData.append("topic", data.topic);
+  }
+
+  if (typeof data.week_number === "number") {
+    formData.append("week_number", String(data.week_number));
+  }
+
+  if (data.assessment_stage) {
+    formData.append("assessment_stage", data.assessment_stage);
+  }
+
+  if (data.academic_period) {
+    formData.append("academic_period", data.academic_period);
   }
 
   if (data.deadline) {
@@ -66,6 +86,10 @@ export async function updateTask(
   data: {
     title?: string;
     description?: string;
+    topic?: string;
+    week_number?: number | null;
+    assessment_stage?: AssessmentStage | null;
+    academic_period?: string | null;
     mode?: TaskMode;
     deadline?: string | null;
     is_active?: boolean;

@@ -303,6 +303,113 @@ export function GroupBarChart({
   );
 }
 
+export function ModeBarChart({
+  id,
+  data,
+}: {
+  id: string;
+  data: Array<{
+    label: string;
+    average: number | null;
+    evaluated_student_count: number;
+    evaluated_result_count: number;
+  }>;
+}) {
+  const width = 760;
+  const height = 390;
+  const left = 70;
+  const right = 36;
+  const top = 48;
+  const bottom = 88;
+  const innerWidth = width - left - right;
+  const innerHeight = height - top - bottom;
+  const groupWidth = innerWidth / Math.max(data.length, 1);
+  const barWidth = Math.min(120, groupWidth * 0.42);
+  const y = (value: number) =>
+    top + innerHeight - (clamp(value) / 100) * innerHeight;
+
+  return (
+    <svg
+      id={id}
+      viewBox={`0 0 ${width} ${height}`}
+      className="min-w-[620px] w-full"
+      role="img"
+    >
+      <rect width={width} height={height} fill={COLORS.white} />
+      {[0, 20, 40, 60, 80, 100].map((tick) => (
+        <g key={tick}>
+          <line
+            x1={left}
+            x2={width - right}
+            y1={y(tick)}
+            y2={y(tick)}
+            stroke={COLORS.grid}
+          />
+          <text
+            x={left - 14}
+            y={y(tick) + 5}
+            textAnchor="end"
+            fontSize="12"
+            fill={COLORS.muted}
+          >
+            {tick}
+          </text>
+        </g>
+      ))}
+
+      {data.map((item, index) => {
+        const center = left + groupWidth * index + groupWidth / 2;
+        const numericAverage = isScore(item.average) ? item.average : null;
+        const barY = numericAverage === null ? top + innerHeight : y(numericAverage);
+
+        return (
+          <g key={item.label}>
+            {numericAverage !== null ? (
+              <rect
+                x={center - barWidth / 2}
+                y={barY}
+                width={barWidth}
+                height={top + innerHeight - barY}
+                rx="12"
+                fill={index === 0 ? COLORS.blue : COLORS.green}
+              />
+            ) : null}
+            <text
+              x={center}
+              y={numericAverage !== null ? barY - 12 : top + innerHeight - 10}
+              textAnchor="middle"
+              fontSize="14"
+              fontWeight="700"
+              fill={numericAverage !== null ? COLORS.text : COLORS.muted}
+            >
+              {numericAverage !== null ? `${numericAverage.toFixed(1)}` : "—"}
+            </text>
+            <text
+              x={center}
+              y={height - 50}
+              textAnchor="middle"
+              fontSize="14"
+              fontWeight="700"
+              fill={COLORS.text}
+            >
+              {item.label}
+            </text>
+            <text
+              x={center}
+              y={height - 28}
+              textAnchor="middle"
+              fontSize="12"
+              fill={COLORS.muted}
+            >
+              {item.evaluated_student_count} talaba • {item.evaluated_result_count} natija
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 export function DonutChart({
   id,
   values,
