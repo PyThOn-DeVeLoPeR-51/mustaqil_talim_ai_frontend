@@ -106,13 +106,25 @@ function safeCell(value: unknown) {
   return String(value);
 }
 
-function PreviewBox({ title, url, hint }: { title: string; url?: string | null; hint: string }) {
+function PreviewBox({
+  title,
+  url,
+  openUrl,
+  hint,
+}: {
+  title: string;
+  url?: string | null;
+  openUrl?: string | null;
+  hint: string;
+}) {
   const finalUrl = getFileUrl(url);
+  const finalOpenUrl = getFileUrl(openUrl ?? url);
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <div className="text-sm font-medium">{title}</div>
+
         <Badge variant="outline" className="text-xs">
           {finalUrl ? "Mavjud" : "Yo‘q"}
         </Badge>
@@ -121,10 +133,18 @@ function PreviewBox({ title, url, hint }: { title: string; url?: string | null; 
       {finalUrl ? (
         <div className="overflow-hidden rounded-xl border bg-muted/30">
           {finalUrl.toLowerCase().endsWith(".pdf") ? (
-            <iframe src={finalUrl} className="h-80 w-full" title={title} />
+            <iframe
+              src={finalUrl}
+              className="h-80 w-full"
+              title={title}
+            />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={finalUrl} alt={title} className="max-h-80 w-full object-contain" />
+            <img
+              src={finalUrl}
+              alt={title}
+              className="max-h-80 w-full object-contain"
+            />
           )}
         </div>
       ) : (
@@ -134,9 +154,14 @@ function PreviewBox({ title, url, hint }: { title: string; url?: string | null; 
       )}
 
       <div className="text-xs text-muted-foreground">
-        {finalUrl ? (
-          <a href={finalUrl} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
-            Faylni alohida oynada ochish
+        {finalOpenUrl ? (
+          <a
+            href={finalOpenUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-blue-600 hover:underline"
+          >
+            Asl faylni alohida oynada ochish
           </a>
         ) : (
           hint
@@ -177,7 +202,11 @@ function AttemptDetail({ attempt, attemptNumber }: { attempt: ResultRead; attemp
       <div className="grid gap-4 lg:grid-cols-2">
         <PreviewBox
           title={`Talaba chizmasi (${attemptNumber}-urinish)`}
-          url={attempt.uploaded_file_url}
+          url={
+            attempt.uploaded_preview_url ??
+            attempt.uploaded_file_url
+          }
+          openUrl={attempt.uploaded_file_url}
           hint="Talaba yuklagan fayl ko‘rinmayapti."
         />
         <PreviewBox

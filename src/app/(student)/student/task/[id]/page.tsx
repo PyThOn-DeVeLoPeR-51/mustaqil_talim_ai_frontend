@@ -74,13 +74,25 @@ function statusVariant(status?: string): "default" | "secondary" | "destructive"
   return "outline";
 }
 
-function PreviewBox({ title, url, hint }: { title: string; url?: string | null; hint: string }) {
+function PreviewBox({
+  title,
+  url,
+  openUrl,
+  hint,
+}: {
+  title: string;
+  url?: string | null;
+  openUrl?: string | null;
+  hint: string;
+}) {
   const finalUrl = getFileUrl(url);
+  const finalOpenUrl = getFileUrl(openUrl ?? url);
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <div className="text-sm font-medium">{title}</div>
+
         <Badge variant="outline" className="text-xs">
           {finalUrl ? "Mavjud" : "Yo‘q"}
         </Badge>
@@ -89,10 +101,18 @@ function PreviewBox({ title, url, hint }: { title: string; url?: string | null; 
       {finalUrl ? (
         <div className="overflow-hidden rounded-xl border bg-muted/30">
           {finalUrl.toLowerCase().endsWith(".pdf") ? (
-            <iframe src={finalUrl} className="h-[520px] w-full" />
+            <iframe
+              src={finalUrl}
+              className="h-[520px] w-full"
+              title={title}
+            />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={finalUrl} alt={title} className="max-h-[520px] w-full object-contain" />
+            <img
+              src={finalUrl}
+              alt={title}
+              className="max-h-[520px] w-full object-contain"
+            />
           )}
         </div>
       ) : (
@@ -101,9 +121,14 @@ function PreviewBox({ title, url, hint }: { title: string; url?: string | null; 
         </div>
       )}
 
-      {finalUrl ? (
-        <a href={finalUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline">
-          Faylni yangi oynada ochish
+      {finalOpenUrl ? (
+        <a
+          href={finalOpenUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs text-blue-600 hover:underline"
+        >
+          Asl faylni yangi oynada ochish
         </a>
       ) : null}
     </div>
@@ -437,7 +462,11 @@ export default function StudentTaskDetailPage() {
                 <div className="grid gap-4 xl:grid-cols-2">
                   <PreviewBox
                     title="Talaba chizmasi"
-                    url={activeResult?.uploaded_file_url}
+                    url={
+                      activeResult?.uploaded_preview_url ??
+                      activeResult?.uploaded_file_url
+                    }
+                    openUrl={activeResult?.uploaded_file_url}
                     hint="Talaba yuklagan chizma shu yerda ko‘rinadi."
                   />
                   <PreviewBox

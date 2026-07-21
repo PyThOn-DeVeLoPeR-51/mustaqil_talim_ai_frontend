@@ -16,6 +16,39 @@ const COLORS = {
   white: "#ffffff",
 };
 
+type NullableScore = number | null;
+
+function isScore(value: NullableScore): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function buildLineSegments(
+  values: NullableScore[],
+  x: (index: number) => number,
+  y: (value: number) => number,
+) {
+  const segments: string[][] = [];
+  let currentSegment: string[] = [];
+
+  values.forEach((value, index) => {
+    if (isScore(value)) {
+      currentSegment.push(`${x(index)},${y(value)}`);
+      return;
+    }
+
+    if (currentSegment.length) {
+      segments.push(currentSegment);
+      currentSegment = [];
+    }
+  });
+
+  if (currentSegment.length) {
+    segments.push(currentSegment);
+  }
+
+  return segments;
+}
+
 function clamp(value: number, min = 0, max = 100) {
   return Math.min(max, Math.max(min, value));
 }
@@ -37,8 +70,8 @@ export function LineProgressChart({
 }: {
   id: string;
   labels: string[];
-  values: number[];
-  comparisonValues?: number[];
+  values: NullableScore[];
+  comparisonValues?: NullableScore[];
   mainLabel: string;
   comparisonLabel?: string;
 }) {
@@ -52,10 +85,10 @@ export function LineProgressChart({
   const innerHeight = height - top - bottom;
   const x = (index: number) => left + (index * innerWidth) / Math.max(labels.length - 1, 1);
   const y = (value: number) => top + innerHeight - (clamp(value) / 100) * innerHeight;
-  const points = values.map((value, index) => `${x(index)},${y(value)}`).join(" ");
-  const comparisonPoints = comparisonValues
-    ?.map((value, index) => `${x(index)},${y(value)}`)
-    .join(" ");
+  const mainSegments = buildLineSegments(values, x, y);
+  const comparisonSegments = comparisonValues
+    ? buildLineSegments(comparisonValues, x, y)
+    : [];
 
   return (
     <svg id={id} viewBox={`0 0 ${width} ${height}`} className="min-w-[760px] w-full" role="img">
@@ -75,23 +108,80 @@ export function LineProgressChart({
         </text>
       ))}
 
-      {comparisonPoints ? (
-        <polyline points={comparisonPoints} fill="none" stroke={COLORS.slate} strokeWidth="3" strokeDasharray="8 7" />
-      ) : null}
-      <polyline points={points} fill="none" stroke={COLORS.blue} strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" />
-
-      {values.map((value, index) => (
-        <g key={`${index}-${value}`}>
-          <circle cx={x(index)} cy={y(value)} r="6" fill={COLORS.white} stroke={COLORS.blue} strokeWidth="4" />
-          <text x={x(index)} y={y(value) - 13} textAnchor="middle" fontSize="12" fontWeight="700" fill={COLORS.blue}>
-            {Math.round(value)}
-          </text>
-        </g>
+      {comparisonSegments.map((points, index) => (
+        <polyline
+          key={`comparison-segment-${index}`}
+          points={points.join(" ")}
+          fill="none"
+          stroke={COLORS.slate}
+          strokeWidth="3"
+          strokeDasharray="8 7"
+        />
       ))}
 
-      {comparisonValues?.map((value, index) => (
-        <circle key={`comparison-${index}`} cx={x(index)} cy={y(value)} r="4" fill={COLORS.slate} />
+      {mainSegments.map((points, index) => (
+        <polyline
+          key={`main-segment-${index}`}
+          points={points.join(" ")}
+          fill="none"
+          stroke={COLORS.blue}
+          strokeWidth="4"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
       ))}
+
+      {values.map((value, index) => {
+        if (!isScore(value)) {
+          return (
+            <text
+              key={`missing-${index}`}
+              x={x(index)}
+              y={top + innerHeight - 8}
+              textAnchor="middle"
+              fontSize="13"
+              fill={COLORS.muted}
+            >
+              —
+            </text>
+          );
+        }
+
+        return (
+          <g key={`${index}-${value}`}>
+            <circle
+              cx={x(index)}
+              cy={y(value)}
+              r="6"
+              fill={COLORS.white}
+              stroke={COLORS.blue}
+              strokeWidth="4"
+            />
+            <text
+              x={x(index)}
+              y={y(value) - 13}
+              textAnchor="middle"
+              fontSize="12"
+              fontWeight="700"
+              fill={COLORS.blue}
+            >
+              {Math.round(value)}
+            </text>
+          </g>
+        );
+      })}
+
+      {comparisonValues?.map((value, index) =>
+        isScore(value) ? (
+          <circle
+            key={`comparison-${index}`}
+            cx={x(index)}
+            cy={y(value)}
+            r="4"
+            fill={COLORS.slate}
+          />
+        ) : null,
+      )}
 
       <g transform={`translate(${left}, 20)`}>
         <line x1="0" x2="28" y1="0" y2="0" stroke={COLORS.blue} strokeWidth="4" />
@@ -112,7 +202,7 @@ export function GroupBarChart({
   data,
 }: {
   id: string;
-  data: Array<{ label: string; before: number; after: number }>;
+  data: Array<{ label: string; before: number | null; after: number | null; }>;
 }) {
   const width = 940;
   const height = 390;
@@ -140,12 +230,64 @@ export function GroupBarChart({
         const center = left + groupWidth * index + groupWidth / 2;
         const beforeX = center - barWidth - 6;
         const afterX = center + 6;
+        const beforeValue = isScore(item.before) ? item.before : null;
+        const afterValue = isScore(item.after) ? item.after : null;
+        const hasBefore = beforeValue !== null;
+        const hasAfter = afterValue !== null;
+
+        const beforeY = hasBefore
+          ? y(beforeValue)
+          : top + innerHeight;
+
+        const afterY = hasAfter
+          ? y(afterValue)
+          : top + innerHeight;
+
         return (
           <g key={item.label}>
-            <rect x={beforeX} y={y(item.before)} width={barWidth} height={top + innerHeight - y(item.before)} rx="8" fill={COLORS.slate} />
-            <rect x={afterX} y={y(item.after)} width={barWidth} height={top + innerHeight - y(item.after)} rx="8" fill={COLORS.blue} />
-            <text x={beforeX + barWidth / 2} y={y(item.before) - 10} textAnchor="middle" fontSize="12" fontWeight="700" fill={COLORS.slate}>{Math.round(item.before)}</text>
-            <text x={afterX + barWidth / 2} y={y(item.after) - 10} textAnchor="middle" fontSize="12" fontWeight="700" fill={COLORS.blue}>{Math.round(item.after)}</text>
+            {hasBefore ? (
+              <rect
+                x={beforeX}
+                y={beforeY}
+                width={barWidth}
+                height={top + innerHeight - beforeY}
+                rx="8"
+                fill={COLORS.slate}
+              />
+            ) : null}
+
+            {hasAfter ? (
+              <rect
+                x={afterX}
+                y={afterY}
+                width={barWidth}
+                height={top + innerHeight - afterY}
+                rx="8"
+                fill={COLORS.blue}
+              />
+            ) : null}
+
+            <text
+              x={beforeX + barWidth / 2}
+              y={hasBefore ? beforeY - 10 : top + innerHeight - 8}
+              textAnchor="middle"
+              fontSize="12"
+              fontWeight="700"
+              fill={hasBefore ? COLORS.slate : COLORS.muted}
+            >
+              {hasBefore ? Math.round(beforeValue) : "—"}
+            </text>
+
+            <text
+              x={afterX + barWidth / 2}
+              y={hasAfter ? afterY - 10 : top + innerHeight - 8}
+              textAnchor="middle"
+              fontSize="12"
+              fontWeight="700"
+              fill={hasAfter ? COLORS.blue : COLORS.muted}
+            >
+              {hasAfter ? Math.round(afterValue) : "—"}
+            </text>
             <text x={center} y={height - 34} textAnchor="middle" fontSize="13" fill={COLORS.text}>{item.label}</text>
           </g>
         );
@@ -175,14 +317,18 @@ export function DonutChart({
   const radius = 112;
   const strokeWidth = 52;
   const circumference = 2 * Math.PI * radius;
-  const total = Math.max(1, values.reduce((sum, item) => sum + item.value, 0));
+  const total = values.reduce((sum, item) => sum + item.value, 0);
+  const safeTotal = Math.max(1, total);
   const segments = values.map((item, index) => {
-    const previous = values.slice(0, index).reduce((sum, row) => sum + row.value, 0);
-    const portion = item.value / total;
+    const previous = values
+      .slice(0, index)
+      .reduce((sum, row) => sum + row.value, 0);
+    const portion = item.value / safeTotal;
+
     return {
       ...item,
       dash: portion * circumference,
-      offset: -(previous / total) * circumference,
+      offset: -(previous / safeTotal) * circumference,
     };
   });
 
@@ -209,7 +355,9 @@ export function DonutChart({
 
       <g transform="translate(430, 80)">
         {values.map((item, index) => {
-          const percent = Math.round((item.value / total) * 100);
+          const percent = total > 0
+            ? Math.round((item.value / total) * 100)
+            : 0;
           return (
             <g key={item.label} transform={`translate(0, ${index * 62})`}>
               <rect width="18" height="18" rx="5" fill={item.color} />
@@ -230,7 +378,7 @@ export function RadarChart({
 }: {
   id: string;
   labels: string[];
-  values: number[];
+  values: NullableScore[];
 }) {
   const width = 760;
   const height = 430;
@@ -249,10 +397,17 @@ export function RadarChart({
     const p = point(index, ratio);
     return `${p.x},${p.y}`;
   }).join(" ");
-  const valuePolygon = values.map((value, index) => {
-    const p = point(index, clamp(value) / 100);
-    return `${p.x},${p.y}`;
-  }).join(" ");
+  const hasCompleteData = values.every(isScore);
+
+  const valuePolygon = hasCompleteData
+    ? values
+        .map((value, index) => {
+          const numericValue = value as number;
+          const p = point(index, clamp(numericValue) / 100);
+          return `${p.x},${p.y}`;
+        })
+        .join(" ")
+    : null;
 
   return (
     <svg id={id} viewBox={`0 0 ${width} ${height}`} className="min-w-[620px] w-full" role="img">
@@ -263,16 +418,44 @@ export function RadarChart({
       {labels.map((label, index) => {
         const edge = point(index, 1);
         const textPoint = point(index, 1.17);
-        const valuePoint = point(index, clamp(values[index]) / 100);
+        const value = values[index];
+        const valuePoint = isScore(value)
+          ? point(index, clamp(value) / 100)
+          : null; 
         return (
           <g key={label}>
             <line x1={cx} y1={cy} x2={edge.x} y2={edge.y} stroke={COLORS.grid} />
             <text x={textPoint.x} y={textPoint.y} textAnchor="middle" dominantBaseline="middle" fontSize="12" fill={COLORS.text}>{label}</text>
-            <circle cx={valuePoint.x} cy={valuePoint.y} r="5" fill={COLORS.blue} />
+            {valuePoint ? (
+              <circle
+                cx={valuePoint.x}
+                cy={valuePoint.y}
+                r="5"
+                fill={COLORS.blue}
+              />
+            ) : (
+              <text
+                x={textPoint.x}
+                y={textPoint.y + 17}
+                textAnchor="middle"
+                fontSize="12"
+                fill={COLORS.muted}
+              >
+                —
+              </text>
+            )}
           </g>
         );
       })}
-      <polygon points={valuePolygon} fill={COLORS.blueLight} fillOpacity="0.75" stroke={COLORS.blue} strokeWidth="3" />
+      {valuePolygon ? (
+        <polygon
+          points={valuePolygon}
+          fill={COLORS.blueLight}
+          fillOpacity="0.75"
+          stroke={COLORS.blue}
+          strokeWidth="3"
+        />
+      ) : null}
       <text x="22" y="28" fontSize="12" fill={COLORS.muted}>Rubrika mezonlari bo‘yicha o‘rtacha natija (%)</text>
     </svg>
   );
@@ -284,7 +467,7 @@ export function HeatmapChart({
   columns,
 }: {
   id: string;
-  rows: Array<{ name: string; values: number[] }>;
+  rows: Array<{ name: string; values: NullableScore[]; }>;
   columns: string[];
 }) {
   const width = 980;
@@ -303,29 +486,39 @@ export function HeatmapChart({
       {rows.map((row, rowIndex) => (
         <g key={row.name}>
           <text x={left - 16} y={top + rowIndex * cellHeight + 29} textAnchor="end" fontSize="12" fill={COLORS.text}>{row.name}</text>
-          {row.values.map((value, columnIndex) => (
-            <g key={`${row.name}-${columnIndex}`}>
-              <rect
-                x={left + columnIndex * cellWidth + 4}
-                y={top + rowIndex * cellHeight + 4}
-                width={cellWidth - 8}
-                height={cellHeight - 8}
-                rx="8"
-                fill={scoreColor(value)}
-                fillOpacity="0.88"
-              />
-              <text
-                x={left + columnIndex * cellWidth + cellWidth / 2}
-                y={top + rowIndex * cellHeight + 29}
-                textAnchor="middle"
-                fontSize="12"
-                fontWeight="700"
-                fill={COLORS.white}
-              >
-                {Math.round(value)}
-              </text>
-            </g>
-          ))}
+          {row.values.map((value, columnIndex) => {
+            const numericValue = isScore(value) ? value : null;
+            const hasValue = numericValue !== null;
+
+            return (
+              <g key={`${row.name}-${columnIndex}`}>
+                <rect
+                  x={left + columnIndex * cellWidth + 4}
+                  y={top + rowIndex * cellHeight + 4}
+                  width={cellWidth - 8}
+                  height={cellHeight - 8}
+                  rx="8"
+                  fill={
+                    hasValue
+                      ? scoreColor(numericValue)
+                      : COLORS.grid
+                  }
+                  fillOpacity={hasValue ? "0.88" : "0.65"}
+                />
+
+                <text
+                  x={left + columnIndex * cellWidth + cellWidth / 2}
+                  y={top + rowIndex * cellHeight + 29}
+                  textAnchor="middle"
+                  fontSize="12"
+                  fontWeight="700"
+                  fill={hasValue ? COLORS.white : COLORS.muted}
+                >
+                  {hasValue ? Math.round(numericValue) : "—"}
+                </text>
+              </g>
+            );
+          })}
         </g>
       ))}
       <g transform={`translate(${left}, ${height - 28})`}>
