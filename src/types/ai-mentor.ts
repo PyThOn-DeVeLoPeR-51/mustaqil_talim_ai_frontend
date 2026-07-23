@@ -1,3 +1,11 @@
+
+export type AIMentorLLMStatus = {
+  provider: string;
+  model?: string | null;
+  configured: boolean;
+  fallback_to_mock: boolean;
+};
+
 export type AIMentorDiagnosticAnswerType =
   | "single_choice"
   | "multiple_choice"

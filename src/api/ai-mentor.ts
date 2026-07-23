@@ -10,9 +10,18 @@ import type {
   AIMentorPlanDetailResponse,
   AIMentorPlanItem,
   AIMentorPlanItemStatus,
+  AIMentorLLMStatus,
 } from "@/types/ai-mentor";
 
 const config = () => ({ headers: studentAuthHeaders() });
+
+export async function getAIMentorLLMStatus(): Promise<AIMentorLLMStatus> {
+  const response = await api.get<AIMentorLLMStatus>(
+    "/ai-mentor/llm/status",
+    config(),
+  );
+  return response.data;
+}
 
 export async function getAIMentorDiagnosticQuestions(): Promise<
   AIMentorDiagnosticQuestion[]
@@ -65,12 +74,12 @@ export async function submitAIMentorDiagnosticAnswers(
   return response.data;
 }
 
-export async function createAIMentorMockPlan(data: {
+export async function createAIMentorGeneratedPlan(data: {
   diagnostic_session_id: number;
   start_date: string;
 }): Promise<AIMentorPlanDetailResponse> {
   const response = await api.post<AIMentorPlanDetailResponse>(
-    "/ai-mentor/plans/mock",
+    "/ai-mentor/plans/generate",
     data,
     config(),
   );

@@ -27,10 +27,11 @@ import { toast } from "sonner";
 import {
   createAIMentorChatSession,
   createAIMentorDiagnosticSession,
-  createAIMentorMockPlan,
+  createAIMentorGeneratedPlan,
   getAIMentorChatSession,
   getAIMentorChatSessions,
   getAIMentorDiagnosticQuestions,
+  getAIMentorLLMStatus,
   getAIMentorDiagnosticSession,
   getAIMentorDiagnosticSessions,
   getCurrentAIMentorPlan,
@@ -55,6 +56,7 @@ import type {
   AIMentorDiagnosticQuestion,
   AIMentorDiagnosticSessionDetail,
   AIMentorOptionValue,
+  AIMentorLLMStatus,
   AIMentorPlanDetailResponse,
   AIMentorPlanItem,
   AIMentorPlanItemStatus,
@@ -167,6 +169,7 @@ function planStatusVariant(status: AIMentorPlanItemStatus) {
 
 export default function MentorPage() {
   const [questions, setQuestions] = useState<AIMentorDiagnosticQuestion[]>([]);
+  const [llmStatus, setLlmStatus] = useState<AIMentorLLMStatus | null>(null);
   const [answers, setAnswers] = useState<DiagnosticFormAnswers>({});
   const [diagnostic, setDiagnostic] =
     useState<AIMentorDiagnosticSessionDetail | null>(null);
@@ -187,13 +190,19 @@ export default function MentorPage() {
     setLoadError(null);
 
     try {
-      const [questionRows, diagnosticSessions, currentPlan, chatSessions] =
-        await Promise.all([
-          getAIMentorDiagnosticQuestions(),
-          getAIMentorDiagnosticSessions(),
-          getCurrentAIMentorPlan(),
-          getAIMentorChatSessions(),
-        ]);
+      const [
+        llmProviderStatus,
+        questionRows,
+        diagnosticSessions,
+        currentPlan,
+        chatSessions,
+      ] = await Promise.all([
+        getAIMentorLLMStatus(),
+        getAIMentorDiagnosticQuestions(),
+        getAIMentorDiagnosticSessions(),
+        getCurrentAIMentorPlan(),
+        getAIMentorChatSessions(),
+      ]);
 
       const latestSession = diagnosticSessions[0]
         ? await getAIMentorDiagnosticSession(diagnosticSessions[0].id)
@@ -214,6 +223,7 @@ export default function MentorPage() {
         ? await getAIMentorChatSession(preferredChat.id)
         : null;
 
+      setLlmStatus(llmProviderStatus);
       setQuestions(questionRows);
       setDiagnostic(latestSession);
       setAnswers(answerMapFromSession(latestSession));
@@ -320,7 +330,7 @@ export default function MentorPage() {
         session.id,
         buildAnswerPayload(),
       );
-      const createdPlan = await createAIMentorMockPlan({
+      const createdPlan = await createAIMentorGeneratedPlan({
         diagnostic_session_id: completedSession.id,
         start_date: formatLocalDate(new Date()),
       });
@@ -341,7 +351,13 @@ export default function MentorPage() {
         }
       }
 
-      toast.success("4 haftalik shaxsiy reja backendda yaratildi.");
+      if (createdPlan.plan.generation_source === "llm") {
+        toast.success("AI siz uchun 4 haftalik shaxsiy reja yaratdi.");
+      } else {
+        toast.warning(
+          "AI xizmati vaqtincha ishlamadi. Reja zaxira algoritm orqali yaratildi.",
+        );
+      }
     } catch (error) {
       console.error("AI Mentor plan creation error:", error);
       toast.error(
@@ -455,7 +471,13 @@ export default function MentorPage() {
       <div>
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">AI Mentor</h1>
-          <Badge variant="secondary">Backend mock AI</Badge>
+          <Badge variant="secondary">
+            {llmStatus?.provider === "mock"
+              ? "Sinov AI"
+              : llmStatus?.configured
+                ? "Haqiqiy AI faol"
+                : "AI sozlanmagan"}
+          </Badge>
           <Badge variant="outline">Bahoga ta’sir qilmaydi</Badge>
         </div>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
@@ -691,10 +713,18 @@ export default function MentorPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="font-semibold">{planData.plan.title}</h2>
                     <Badge variant="outline">v{planData.plan.version}</Badge>
-                    <Badge variant="outline">
-                      {planData.plan.generation_source === "mock"
-                        ? "Mock AI"
-                        : planData.plan.generation_source}
+                    <Badge
+                      variant={
+                        planData.plan.generation_source === "llm"
+                          ? "secondary"
+                          : "outline"
+                      }
+                    >
+                      {planData.plan.generation_source === "llm"
+                        ? "AI orqali yaratildi"
+                        : planData.plan.generation_source === "mock"
+                          ? "Zaxira reja"
+                          : "Qo‘lda yaratilgan"}
                     </Badge>
                   </div>
                   {planData.plan.summary ? (
@@ -819,8 +849,8 @@ export default function MentorPage() {
               AI Mentor bilan chat
             </CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">
-              Xabarlar backendda saqlanadi. Hozir javoblarni mock AI modeli
-              yaratmoqda.
+              Xabarlar backendda saqlanadi. Javoblar sozlangan AI modeli orqali
+              yaratiladi; xizmat vaqtincha ishlamasa zaxira javob qo‘llanadi.
             </p>
           </div>
           <Button
