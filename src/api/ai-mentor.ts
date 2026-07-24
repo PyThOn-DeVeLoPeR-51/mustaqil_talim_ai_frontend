@@ -1,6 +1,9 @@
-import { api, studentAuthHeaders } from "@/lib/api";
+import { API_BASE_URL, api, getStudentToken, studentAuthHeaders } from "@/lib/api";
 import type {
   AIMentorChatResponse,
+  AIMentorChatStreamDone,
+  AIMentorChatStreamFallback,
+  AIMentorChatStreamStart,
   AIMentorChatSession,
   AIMentorChatSessionDetail,
   AIMentorDiagnosticAnswerInput,
@@ -163,4 +166,150 @@ export async function sendAIMentorChatMessage(
     config(),
   );
   return response.data;
+}
+
+
+type AIMentorChatStreamHandlers = {
+  onStart?: (payload: AIMentorChatStreamStart) => void;
+  onDelta?: (delta: string) => void;
+  onFallback?: (payload: AIMentorChatStreamFallback) => void;
+  onDone?: (payload: AIMentorChatStreamDone) => void;
+};
+
+type AIMentorSSEPayload = Record<string, unknown>;
+
+function getStreamingErrorMessage(payload: AIMentorSSEPayload) {
+  const message = payload.message;
+  return typeof message === "string" && message.trim()
+    ? message
+    : "AI Mentor streaming javobini yakunlay olmadi.";
+}
+
+export async function streamAIMentorChatMessage(
+  sessionId: number,
+  content: string,
+  handlers: AIMentorChatStreamHandlers = {},
+  signal?: AbortSignal,
+): Promise<AIMentorChatStreamDone> {
+  const token = getStudentToken();
+  if (!token) {
+    throw new Error("Talaba autentifikatsiya tokeni topilmadi.");
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/ai-mentor/chat/sessions/${sessionId}/messages/stream`,
+    {
+      method: "POST",
+      headers: {
+        Accept: "text/event-stream",
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ content }),
+      cache: "no-store",
+      signal,
+    },
+  );
+
+  if (!response.ok) {
+    let message = `AI Mentor streaming so‘rovi bajarilmadi (${response.status}).`;
+    try {
+      const payload = (await response.json()) as { detail?: unknown };
+      if (typeof payload.detail === "string" && payload.detail.trim()) {
+        message = payload.detail;
+      }
+    } catch {
+      // JSON bo‘lmagan xato javobida status matni yetarli.
+    }
+    throw new Error(message);
+  }
+
+  if (!response.body) {
+    throw new Error("Browser streaming javob oqimini ocholmadi.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+  let finalPayload: AIMentorChatStreamDone | null = null;
+
+  const dispatchEventBlock = (block: string) => {
+    if (!block.trim()) return;
+
+    let eventName = "message";
+    const dataLines: string[] = [];
+
+    for (const line of block.split("\n")) {
+      if (line.startsWith("event:")) {
+        eventName = line.slice("event:".length).trim();
+      } else if (line.startsWith("data:")) {
+        dataLines.push(line.slice("data:".length).trimStart());
+      }
+    }
+
+    if (dataLines.length === 0) return;
+
+    let payload: AIMentorSSEPayload;
+    try {
+      payload = JSON.parse(dataLines.join("\n")) as AIMentorSSEPayload;
+    } catch {
+      throw new Error("AI Mentor streaming javobining formati noto‘g‘ri.");
+    }
+
+    if (eventName === "start") {
+      handlers.onStart?.(payload as AIMentorChatStreamStart);
+      return;
+    }
+
+    if (eventName === "delta") {
+      const delta = payload.delta;
+      if (typeof delta === "string" && delta) {
+        handlers.onDelta?.(delta);
+      }
+      return;
+    }
+
+    if (eventName === "fallback") {
+      handlers.onFallback?.(payload as AIMentorChatStreamFallback);
+      return;
+    }
+
+    if (eventName === "done") {
+      finalPayload = payload as AIMentorChatStreamDone;
+      handlers.onDone?.(finalPayload);
+      return;
+    }
+
+    if (eventName === "error") {
+      throw new Error(getStreamingErrorMessage(payload));
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    buffer = buffer.replaceAll("\r\n", "\n");
+
+    let separatorIndex = buffer.indexOf("\n\n");
+    while (separatorIndex >= 0) {
+      const block = buffer.slice(0, separatorIndex);
+      buffer = buffer.slice(separatorIndex + 2);
+      dispatchEventBlock(block);
+      separatorIndex = buffer.indexOf("\n\n");
+    }
+  }
+
+  buffer += decoder.decode();
+  buffer = buffer.replaceAll("\r\n", "\n");
+  if (buffer.trim()) {
+    dispatchEventBlock(buffer);
+  }
+
+  if (!finalPayload) {
+    throw new Error("AI Mentor streaming javobi yakunlanmasdan uzildi.");
+  }
+
+  return finalPayload;
 }

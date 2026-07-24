@@ -35,7 +35,7 @@ import {
   getAIMentorDiagnosticSession,
   getAIMentorDiagnosticSessions,
   getCurrentAIMentorPlan,
-  sendAIMentorChatMessage,
+  streamAIMentorChatMessage,
   submitAIMentorDiagnosticAnswers,
   updateAIMentorChatSession,
   updateAIMentorPlanItemProgress,
@@ -51,6 +51,7 @@ import { getApiErrorMessage } from "@/lib/error";
 import type {
   AIMentorChatMessage,
   AIMentorChatSession,
+  AIMentorChatStreamStart,
   AIMentorChoiceOption,
   AIMentorDiagnosticAnswerInput,
   AIMentorDiagnosticQuestion,
@@ -416,20 +417,122 @@ export default function MentorPage() {
     if (!content || sendingMessage) return;
 
     setSendingMessage(true);
-    try {
-      const activeChat = await getOrCreateActiveChat();
-      const response = await sendAIMentorChatMessage(activeChat.id, content);
 
-      setChatSession(response.session);
+    let activeChat: AIMentorChatSession | null = null;
+    const temporaryBaseId = -Date.now();
+    const temporaryUserId = temporaryBaseId;
+    const temporaryAssistantId = temporaryBaseId - 1;
+
+    try {
+      activeChat = await getOrCreateActiveChat();
+
+      const nextSequenceNumber =
+        messages.reduce(
+          (maximum, message) => Math.max(maximum, message.sequence_number),
+          0,
+        ) + 1;
+      const now = new Date().toISOString();
+
+      const optimisticUserMessage: AIMentorChatMessage = {
+        id: temporaryUserId,
+        session_id: activeChat.id,
+        sequence_number: nextSequenceNumber,
+        role: "user",
+        content,
+        model_name: null,
+        token_count: null,
+        metadata_json: { stream_pending: true },
+        created_at: now,
+      };
+
+      const streamingAssistantMessage: AIMentorChatMessage = {
+        id: temporaryAssistantId,
+        session_id: activeChat.id,
+        sequence_number: nextSequenceNumber + 1,
+        role: "assistant",
+        content: "",
+        model_name: llmStatus?.model ?? null,
+        token_count: null,
+        metadata_json: { stream_pending: true },
+        created_at: now,
+      };
+
       setMessages((current) => [
         ...current,
-        response.user_message,
-        response.assistant_message,
+        optimisticUserMessage,
+        streamingAssistantMessage,
       ]);
       setInput("");
+
+      await streamAIMentorChatMessage(activeChat.id, content, {
+        onStart: (payload: AIMentorChatStreamStart) => {
+          const persistedUserMessage: AIMentorChatMessage = {
+            ...payload.user_message,
+            model_name: null,
+            token_count: null,
+            metadata_json: { stream: true },
+          };
+
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === temporaryUserId ? persistedUserMessage : message,
+            ),
+          );
+        },
+        onDelta: (delta) => {
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === temporaryAssistantId
+                ? { ...message, content: `${message.content}${delta}` }
+                : message,
+            ),
+          );
+        },
+        onFallback: (payload) => {
+          if (payload.replace) {
+            setMessages((current) =>
+              current.map((message) =>
+                message.id === temporaryAssistantId
+                  ? { ...message, content: "" }
+                  : message,
+              ),
+            );
+          }
+
+          toast.warning(
+            "AI xizmatida vaqtinchalik uzilish bo‘ldi. Zaxira javob ko‘rsatilmoqda.",
+          );
+        },
+        onDone: (payload) => {
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === temporaryAssistantId
+                ? payload.assistant_message
+                : message,
+            ),
+          );
+        },
+      });
     } catch (error) {
-      console.error("AI Mentor chat error:", error);
+      console.error("AI Mentor streaming chat error:", error);
       toast.error(getApiErrorMessage(error, "Xabarni yuborib bo‘lmadi."));
+
+      if (activeChat) {
+        try {
+          const refreshedChat = await getAIMentorChatSession(activeChat.id);
+          setChatSession(refreshedChat);
+          setMessages(refreshedChat.messages);
+        } catch (refreshError) {
+          console.error("AI Mentor chat recovery error:", refreshError);
+          setMessages((current) =>
+            current.filter(
+              (message) =>
+                message.id !== temporaryUserId &&
+                message.id !== temporaryAssistantId,
+            ),
+          );
+        }
+      }
     } finally {
       setSendingMessage(false);
     }
@@ -849,15 +952,15 @@ export default function MentorPage() {
               AI Mentor bilan chat
             </CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">
-              Xabarlar backendda saqlanadi. Javoblar sozlangan AI modeli orqali
-              yaratiladi; xizmat vaqtincha ishlamasa zaxira javob qo‘llanadi.
+              Xabarlar backendda saqlanadi. AI javobi real vaqtda bosqichma-bosqich
+              ko‘rsatiladi; xizmat vaqtincha ishlamasa zaxira javob qo‘llanadi.
             </p>
           </div>
           <Button
             type="button"
             size="sm"
             variant="outline"
-            disabled={startingNewChat}
+            disabled={startingNewChat || sendingMessage}
             onClick={() => void startNewChat()}
           >
             {startingNewChat ? (
@@ -892,7 +995,25 @@ export default function MentorPage() {
                         : "rounded-bl-md border bg-background"
                     }`}
                   >
-                    {message.content}
+                    {!isStudent &&
+                    message.metadata_json?.stream_pending === true &&
+                    !message.content ? (
+                      <span className="inline-flex items-center gap-2 text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        AI javob yozmoqda...
+                      </span>
+                    ) : (
+                      <>
+                        {message.content}
+                        {!isStudent &&
+                        message.metadata_json?.stream_pending === true ? (
+                          <span
+                            className="ml-1 inline-block h-4 w-1 animate-pulse bg-current align-middle"
+                            aria-hidden="true"
+                          />
+                        ) : null}
+                      </>
+                    )}
                   </div>
                   {isStudent ? (
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted">

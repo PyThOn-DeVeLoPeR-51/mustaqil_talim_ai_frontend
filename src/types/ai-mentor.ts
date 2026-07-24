@@ -190,3 +190,31 @@ export type AIMentorChatResponse = {
   user_message: AIMentorChatMessage;
   assistant_message: AIMentorChatMessage;
 };
+
+
+export type AIMentorChatStreamUserMessage = {
+  id: number;
+  session_id: number;
+  sequence_number: number;
+  role: "user";
+  content: string;
+  created_at: string;
+};
+
+export type AIMentorChatStreamStart = {
+  session_id: number;
+  user_message: AIMentorChatStreamUserMessage;
+  provider: string;
+  model?: string | null;
+};
+
+export type AIMentorChatStreamFallback = {
+  from_provider: string;
+  reason: string;
+  replace: boolean;
+};
+
+export type AIMentorChatStreamDone = {
+  session_id: number;
+  assistant_message: AIMentorChatMessage;
+};
