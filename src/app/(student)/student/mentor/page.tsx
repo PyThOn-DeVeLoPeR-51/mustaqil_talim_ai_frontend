@@ -14,7 +14,9 @@ import {
   Bot,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   Clock3,
+  FileText,
   Loader2,
   MessageSquarePlus,
   RotateCcw,
@@ -40,6 +42,7 @@ import {
   updateAIMentorChatSession,
   updateAIMentorPlanItemProgress,
 } from "@/api/ai-mentor";
+import { MarkdownMessage } from "@/components/ai-mentor/markdown-message";
 import { ErrorState, LoadingState } from "@/components/states/page-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,6 +64,8 @@ import type {
   AIMentorPlanDetailResponse,
   AIMentorPlanItem,
   AIMentorPlanItemStatus,
+  AIMentorRagMetadata,
+  AIMentorRagSource,
 } from "@/types/ai-mentor";
 
 type DiagnosticFormValue =
@@ -166,6 +171,140 @@ function planStatusVariant(status: AIMentorPlanItemStatus) {
   if (status === "completed") return "secondary" as const;
   if (status === "skipped") return "destructive" as const;
   return "outline" as const;
+}
+
+function isRagSource(value: unknown): value is AIMentorRagSource {
+  if (!value || typeof value !== "object") return false;
+  const source = value as Record<string, unknown>;
+
+  return (
+    typeof source.source_id === "number" &&
+    typeof source.document_id === "number" &&
+    typeof source.document_title === "string" &&
+    typeof source.chunk_id === "number" &&
+    typeof source.chunk_index === "number" &&
+    typeof source.score === "number" &&
+    typeof source.excerpt === "string"
+  );
+}
+
+function getRagMetadata(
+  message: AIMentorChatMessage,
+): AIMentorRagMetadata | null {
+  const rawRag = message.metadata_json?.rag;
+  if (!rawRag || typeof rawRag !== "object") return null;
+
+  const rag = rawRag as Record<string, unknown>;
+  if (
+    rag.used_for_answer !== true ||
+    !Array.isArray(rag.sources) ||
+    rag.sources.length === 0
+  ) {
+    return null;
+  }
+
+  const sources = rag.sources.filter(isRagSource);
+  if (sources.length === 0) return null;
+
+  return {
+    enabled: rag.enabled === true,
+    status: typeof rag.status === "string" ? rag.status : "ready",
+    used_for_answer: true,
+    source_count:
+      typeof rag.source_count === "number" ? rag.source_count : sources.length,
+    embedding_model:
+      typeof rag.embedding_model === "string" ? rag.embedding_model : null,
+    sources,
+  };
+}
+
+function sourceLocationLabel(source: AIMentorRagSource) {
+  const labels: string[] = [];
+
+  if (source.section_title?.trim()) {
+    labels.push(source.section_title.trim());
+  }
+
+  const pageStart = source.page_number_start ?? source.page_number ?? null;
+  const pageEnd = source.page_number_end ?? pageStart;
+  if (pageStart !== null) {
+    labels.push(
+      pageEnd !== null && pageEnd !== pageStart
+        ? `${pageStart}–${pageEnd}-betlar`
+        : `${pageStart}-bet`,
+    );
+  }
+
+  if (labels.length === 0) {
+    labels.push(`Matn bo‘lagi ${source.chunk_index + 1}`);
+  }
+
+  return labels.join(" · ");
+}
+
+function sourceScoreLabel(score: number) {
+  const normalizedScore = Math.max(0, Math.min(1, score));
+  return `${Math.round(normalizedScore * 100)}% mos`;
+}
+
+function RagSources({ message }: { message: AIMentorChatMessage }) {
+  const rag = getRagMetadata(message);
+  if (!rag) return null;
+
+  const sources = [...rag.sources].sort(
+    (first, second) => first.source_id - second.source_id,
+  );
+
+  return (
+    <div className="mt-4 border-t pt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold">
+          <BookOpen className="h-3.5 w-3.5" />
+          Topilgan manbalar
+        </span>
+        <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+          {sources.length} ta
+        </Badge>
+        <span className="text-[11px] text-muted-foreground">
+          O‘qituvchi yuklagan materiallar
+        </span>
+      </div>
+
+      <div className="mt-2 space-y-2">
+        {sources.map((source, index) => (
+          <details
+            key={`${source.document_id}-${source.chunk_id}`}
+            className="group rounded-lg border bg-muted/30 open:bg-muted/50"
+          >
+            <summary className="flex cursor-pointer list-none items-start justify-between gap-3 px-3 py-2.5 [&::-webkit-details-marker]:hidden">
+              <div className="flex min-w-0 items-start gap-2.5">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+                  {source.source_id || index + 1}
+                </span>
+                <div className="min-w-0">
+                  <div className="flex items-start gap-1.5 font-medium leading-5">
+                    <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="line-clamp-2">
+                      {source.document_title}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                    <span>{sourceLocationLabel(source)}</span>
+                    <span aria-hidden="true">•</span>
+                    <span>{sourceScoreLabel(source.score)}</span>
+                  </div>
+                </div>
+              </div>
+              <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="border-t px-3 py-3 text-xs leading-5 text-muted-foreground">
+              <p className="whitespace-pre-wrap">{source.excerpt}</p>
+            </div>
+          </details>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function MentorPage() {
@@ -989,7 +1128,7 @@ export default function MentorPage() {
                     </div>
                   ) : null}
                   <div
-                    className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-6 sm:max-w-[75%] ${
+                    className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-6 sm:max-w-[75%] ${
                       isStudent
                         ? "rounded-br-md bg-primary text-primary-foreground"
                         : "rounded-bl-md border bg-background"
@@ -1004,14 +1143,20 @@ export default function MentorPage() {
                       </span>
                     ) : (
                       <>
-                        {message.content}
-                        {!isStudent &&
-                        message.metadata_json?.stream_pending === true ? (
-                          <span
-                            className="ml-1 inline-block h-4 w-1 animate-pulse bg-current align-middle"
-                            aria-hidden="true"
-                          />
-                        ) : null}
+                        {isStudent ? (
+                          <div className="whitespace-pre-wrap">{message.content}</div>
+                        ) : (
+                          <div>
+                            <MarkdownMessage content={message.content} />
+                            {message.metadata_json?.stream_pending === true ? (
+                              <span
+                                className="mt-1 inline-block h-4 w-1 animate-pulse bg-current align-middle"
+                                aria-hidden="true"
+                              />
+                            ) : null}
+                          </div>
+                        )}
+                        {!isStudent ? <RagSources message={message} /> : null}
                       </>
                     )}
                   </div>

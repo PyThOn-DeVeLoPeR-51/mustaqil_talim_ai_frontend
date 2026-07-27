@@ -157,6 +157,40 @@ export type AIMentorPlanDetailResponse = {
   progress: AIMentorPlanProgress;
 };
 
+export type AIMentorRagSource = {
+  source_id: number;
+  document_id: number;
+  document_title: string;
+  chunk_id: number;
+  chunk_index: number;
+  score: number;
+  excerpt: string;
+  section_title?: string | null;
+  page_number?: number | null;
+  page_number_start?: number | null;
+  page_number_end?: number | null;
+};
+
+export type AIMentorRagMetadata = {
+  enabled: boolean;
+  status: string;
+  used_for_answer: boolean;
+  source_count: number;
+  embedding_model?: string | null;
+  sources: AIMentorRagSource[];
+};
+
+export type AIMentorChatMessageMetadata = {
+  provider?: string;
+  model?: string;
+  stream?: boolean;
+  stream_pending?: boolean;
+  fallback_from_provider?: string;
+  fallback_reason?: string;
+  rag?: AIMentorRagMetadata;
+  [key: string]: unknown;
+};
+
 export type AIMentorChatMessage = {
   id: number;
   session_id: number;
@@ -165,7 +199,7 @@ export type AIMentorChatMessage = {
   content: string;
   model_name?: string | null;
   token_count?: number | null;
-  metadata_json?: Record<string, unknown> | null;
+  metadata_json?: AIMentorChatMessageMetadata | null;
   created_at: string;
 };
 
