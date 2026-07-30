@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, ClipboardList, FileCheck2, LayoutDashboard, Users } from "lucide-react";
+import { BarChart3, BookOpenCheck, ClipboardList, FileCheck2, LayoutDashboard, Users } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -12,6 +12,7 @@ const nav = [
   { href: "/tasks", label: "Topshiriqlar", icon: ClipboardList },
   { href: "/submissions", label: "Natijalar", icon: FileCheck2 },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/knowledge-base", label: "Bilimlar bazasi", icon: BookOpenCheck },
 ];
 
 export function AppSidebar() {
