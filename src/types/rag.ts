@@ -84,3 +84,53 @@ export type RAGSemanticSearchResponse = {
   top_k: number;
   hits: RAGSemanticSearchHit[];
 };
+
+export type RAGJobType = "ingest" | "reprocess" | "embed";
+export type RAGJobStatus = "pending" | "running" | "succeeded" | "failed" | "cancelled";
+
+export type RAGProcessingJob = {
+  id: number;
+  document_id: number;
+  teacher_id: number;
+  job_type: RAGJobType;
+  status: RAGJobStatus;
+  progress_percent: number;
+  attempts: number;
+  max_attempts: number;
+  payload_json?: Record<string, unknown> | null;
+  result_json?: Record<string, unknown> | null;
+  error_message?: string | null;
+  available_at: string;
+  locked_at?: string | null;
+  locked_by?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type RAGDocumentJobResponse = {
+  document: RAGDocument;
+  job: RAGProcessingJob;
+};
+
+export type RAGStorageUsage = {
+  teacher_id: number;
+  document_count: number;
+  document_limit?: number | null;
+  used_bytes: number;
+  limit_bytes?: number | null;
+  remaining_bytes?: number | null;
+  usage_percent?: number | null;
+};
+
+export type RAGMonitoringSummary = {
+  documents_total: number;
+  documents_by_status: Record<string, number>;
+  embedding_by_status: Record<string, number>;
+  jobs_total: number;
+  jobs_by_status: Record<string, number>;
+  storage: RAGStorageUsage;
+  worker_enabled: boolean;
+  worker_poll_seconds: number;
+};

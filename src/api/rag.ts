@@ -97,3 +97,64 @@ export async function semanticSearchRAG(data: {
   });
   return res.data;
 }
+
+export async function uploadRAGDocumentBackground(data: {
+  title: string;
+  task_id?: number | null;
+  auto_embed?: boolean;
+  file: File;
+}): Promise<import("@/types/rag").RAGDocumentJobResponse> {
+  const formData = new FormData();
+  formData.append("title", data.title.trim());
+  if (typeof data.task_id === "number") formData.append("task_id", String(data.task_id));
+  formData.append("auto_embed", String(data.auto_embed ?? true));
+  formData.append("file", data.file);
+  const res = await api.post("/rag/documents/background", formData, {
+    headers: { ...teacherAuthHeaders(), "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+}
+
+export async function reprocessRAGDocumentBackground(
+  documentId: number,
+  autoEmbed = true
+): Promise<import("@/types/rag").RAGProcessingJob> {
+  const res = await api.post(`/rag/documents/${documentId}/reprocess/background`, null, {
+    headers: teacherAuthHeaders(),
+    params: { auto_embed: autoEmbed },
+  });
+  return res.data;
+}
+
+export async function embedRAGDocumentBackground(
+  documentId: number
+): Promise<import("@/types/rag").RAGProcessingJob> {
+  const res = await api.post(`/rag/documents/${documentId}/embed/background`, null, {
+    headers: teacherAuthHeaders(),
+  });
+  return res.data;
+}
+
+export async function getRAGJobs(params?: {
+  job_status?: string;
+  document_id?: number;
+  limit?: number;
+}): Promise<import("@/types/rag").RAGProcessingJob[]> {
+  const res = await api.get("/rag/jobs", { headers: teacherAuthHeaders(), params });
+  return res.data;
+}
+
+export async function retryRAGJob(jobId: number): Promise<import("@/types/rag").RAGProcessingJob> {
+  const res = await api.post(`/rag/jobs/${jobId}/retry`, null, { headers: teacherAuthHeaders() });
+  return res.data;
+}
+
+export async function getRAGStorageUsage(): Promise<import("@/types/rag").RAGStorageUsage> {
+  const res = await api.get("/rag/storage/usage", { headers: teacherAuthHeaders() });
+  return res.data;
+}
+
+export async function getRAGMonitoringSummary(): Promise<import("@/types/rag").RAGMonitoringSummary> {
+  const res = await api.get("/rag/monitoring/summary", { headers: teacherAuthHeaders() });
+  return res.data;
+}
