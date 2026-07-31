@@ -21,17 +21,18 @@ import { toast } from "sonner";
 
 import {
   deleteRAGDocument,
-  embedRAGDocument,
+  embedRAGDocumentBackground,
   getRAGDocumentChunks,
   getRAGDocuments,
   getRAGEmbeddingStatus,
-  reprocessRAGDocument,
+  reprocessRAGDocumentBackground,
   semanticSearchRAG,
   updateRAGDocument,
-  uploadRAGDocument,
+  uploadRAGDocumentBackground,
 } from "@/api/rag";
 import { getTeacherTasks } from "@/api/tasks";
 import { PageHeader } from "@/components/shell/page-header";
+import { RAGProductionPanel } from "@/components/rag/rag-production-panel";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states/page-state";
 import {
   AlertDialog,
@@ -161,6 +162,7 @@ export default function KnowledgeBasePage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [autoEmbed, setAutoEmbed] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [jobsRefreshKey, setJobsRefreshKey] = useState(0);
 
   const [selectedDocument, setSelectedDocument] = useState<RAGDocument | null>(null);
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
@@ -217,10 +219,12 @@ export default function KnowledgeBasePage() {
     );
   }, [chunks, chunkQuery]);
 
-  async function reload() {
+  async function reload(quiet = false) {
     try {
-      setLoading(true);
-      setLoadError("");
+      if (!quiet) {
+        setLoading(true);
+        setLoadError("");
+      }
       const [documentRows, taskRows, provider] = await Promise.all([
         getRAGDocuments(),
         getTeacherTasks(),
@@ -231,9 +235,11 @@ export default function KnowledgeBasePage() {
       setEmbeddingStatus(provider);
     } catch (error) {
       console.error(error);
-      setLoadError(getApiErrorMessage(error, "Bilimlar bazasini yuklab bo‘lmadi."));
+      if (!quiet) {
+        setLoadError(getApiErrorMessage(error, "Bilimlar bazasini yuklab bo‘lmadi."));
+      }
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }
 
@@ -261,25 +267,17 @@ export default function KnowledgeBasePage() {
 
     try {
       setUploading(true);
-      const document = await uploadRAGDocument({
+      const result = await uploadRAGDocumentBackground({
         title: uploadTitle,
         task_id: uploadTaskId ? Number(uploadTaskId) : null,
+        auto_embed: autoEmbed,
         file: uploadFile,
       });
-      toast.success("Hujjat yuklandi va matn bo‘laklariga ajratildi.");
-
-      if (autoEmbed && document.status === "ready") {
-        try {
-          await embedRAGDocument(document.id);
-          toast.success("Embeddinglar ham tayyorlandi.");
-        } catch (error) {
-          toast.warning(getApiErrorMessage(error, "Hujjat saqlandi, ammo embedding yaratilmadi."));
-        }
-      }
-
+      toast.success(`Material background navbatga qo‘yildi. Job #${result.job.id}`);
+      setJobsRefreshKey((value) => value + 1);
       setUploadOpen(false);
       resetUploadForm();
-      await reload();
+      await reload(true);
     } catch (error) {
       toast.error(getApiErrorMessage(error, "Hujjatni yuklashda xatolik yuz berdi."));
     } finally {
@@ -291,9 +289,10 @@ export default function KnowledgeBasePage() {
     try {
       setSelectedDocument(document);
       setBusyAction("embed");
-      await embedRAGDocument(document.id);
-      toast.success("Embedding muvaffaqiyatli yaratildi.");
-      await reload();
+      const job = await embedRAGDocumentBackground(document.id);
+      toast.success(`Embedding navbatga qo‘yildi. Job #${job.id}`);
+      setJobsRefreshKey((value) => value + 1);
+      await reload(true);
     } catch (error) {
       toast.error(getApiErrorMessage(error, "Embedding yaratilmadi."));
     } finally {
@@ -345,10 +344,11 @@ export default function KnowledgeBasePage() {
     if (!selectedDocument) return;
     try {
       setBusyAction("reprocess");
-      await reprocessRAGDocument(selectedDocument.id);
-      toast.success("Hujjat qayta ishlanib, chunklar yangilandi.");
+      const job = await reprocessRAGDocumentBackground(selectedDocument.id, true);
+      toast.success(`Qayta ishlash navbatga qo‘yildi. Job #${job.id}`);
+      setJobsRefreshKey((value) => value + 1);
       setReprocessOpen(false);
-      await reload();
+      await reload(true);
     } catch (error) {
       toast.error(getApiErrorMessage(error, "Hujjatni qayta ishlashda xatolik yuz berdi."));
     } finally {
@@ -411,6 +411,12 @@ export default function KnowledgeBasePage() {
         <SummaryCard title="Embedding tayyor" value={summary.embedded} hint="Semantik qidiruvda qatnashadi" icon={<BrainCircuit className="h-5 w-5" />} />
         <SummaryCard title="Matn bo‘laklari" value={summary.chunksTotal} hint="Jami chunklar" icon={<Database className="h-5 w-5" />} />
       </div>
+
+
+      <RAGProductionPanel
+        refreshKey={jobsRefreshKey}
+        onCompleted={() => void reload(true)}
+      />
 
       <Card>
         <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
@@ -562,13 +568,13 @@ export default function KnowledgeBasePage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Yangi material yuklash</DialogTitle>
-            <DialogDescription>PDF yoki DOCX material matnga ajratiladi va AI Mentor bilimlar bazasiga qo‘shiladi.</DialogDescription>
+            <DialogDescription>PDF yoki DOCX material background navbatga qo‘yiladi; chunklash va embedding jarayonini sahifada kuzatasiz.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2"><Label htmlFor="rag-title">Material nomi</Label><Input id="rag-title" value={uploadTitle} onChange={(event) => setUploadTitle(event.target.value)} placeholder="Muhandislik grafikasi — 1-ma’ruza" /></div>
             <div className="space-y-2"><Label htmlFor="rag-task">Topshiriqqa bog‘lash</Label><select id="rag-task" value={uploadTaskId} onChange={(event: ChangeEvent<HTMLSelectElement>) => setUploadTaskId(event.target.value)} className="h-9 w-full rounded-md border bg-background px-3 text-sm"><option value="">Umumiy material</option>{tasks.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select><p className="text-xs text-muted-foreground">Umumiy material shu o‘qituvchining barcha talabalariga RAG kontekstida ko‘rinadi.</p></div>
             <div className="space-y-2"><Label htmlFor="rag-file">Fayl</Label><Input id="rag-file" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} /><p className="text-xs text-muted-foreground">PDF yoki DOCX, maksimal 25 MB.</p></div>
-            <label className="flex items-start gap-3 rounded-lg border p-3 text-sm"><input type="checkbox" checked={autoEmbed} onChange={(event: ChangeEvent<HTMLInputElement>) => setAutoEmbed(event.target.checked)} className="mt-1" /><span><span className="font-medium">Yuklangach embedding yaratish</span><span className="mt-1 block text-xs text-muted-foreground">Birinchi ishga tushishda lokal model yuklanishi sabab biroz vaqt olishi mumkin.</span></span></label>
+            <label className="flex items-start gap-3 rounded-lg border p-3 text-sm"><input type="checkbox" checked={autoEmbed} onChange={(event: ChangeEvent<HTMLInputElement>) => setAutoEmbed(event.target.checked)} className="mt-1" /><span><span className="font-medium">Chunklashdan keyin embeddingni avtomatik yaratish</span><span className="mt-1 block text-xs text-muted-foreground">Jarayon background worker orqali bajariladi; sahifani yopib qaytsangiz ham job holati saqlanadi.</span></span></label>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setUploadOpen(false)} disabled={uploading}>Bekor qilish</Button>
@@ -607,7 +613,7 @@ export default function KnowledgeBasePage() {
 
       <AlertDialog open={reprocessOpen} onOpenChange={setReprocessOpen}>
         <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>Hujjatni qayta ishlaysizmi?</AlertDialogTitle><AlertDialogDescription>Eski chunklar va embeddinglar o‘chadi. Hujjat yangidan chunklanadi, so‘ng embeddingni qayta yaratish kerak bo‘ladi.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogHeader><AlertDialogTitle>Hujjatni qayta ishlaysizmi?</AlertDialogTitle><AlertDialogDescription>Eski chunklar va embeddinglar yangilanadi. Background worker hujjatni qayta chunklab, embeddingni avtomatik yaratadi.</AlertDialogDescription></AlertDialogHeader>
           <AlertDialogFooter><AlertDialogCancel disabled={busyAction === "reprocess"}>Bekor qilish</AlertDialogCancel><AlertDialogAction onClick={(event) => { event.preventDefault(); void handleReprocess(); }} disabled={busyAction === "reprocess"}>{busyAction === "reprocess" ? "Qayta ishlanmoqda..." : "Reprocess qilish"}</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
