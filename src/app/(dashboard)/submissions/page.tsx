@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { getTeacherResults } from "@/api/results";
+import { DrawingAiResultDiagnostics } from "@/components/drawing-ai/result-diagnostics";
 import { PageHeader } from "@/components/shell/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getFileUrl } from "@/lib/api";
 import type { ResultRead, SubmissionStatus, TaskMode } from "@/types/api";
 
 type FilterStatus = "all" | SubmissionStatus;
@@ -100,77 +100,6 @@ function getScoreDiff(a1: ResultRead | null, a2: ResultRead | null) {
   return Math.round((a2.total_score - a1.total_score) * 10) / 10;
 }
 
-function safeCell(value: unknown) {
-  if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-}
-
-function PreviewBox({
-  title,
-  url,
-  openUrl,
-  hint,
-}: {
-  title: string;
-  url?: string | null;
-  openUrl?: string | null;
-  hint: string;
-}) {
-  const finalUrl = getFileUrl(url);
-  const finalOpenUrl = getFileUrl(openUrl ?? url);
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-sm font-medium">{title}</div>
-
-        <Badge variant="outline" className="text-xs">
-          {finalUrl ? "Mavjud" : "Yo‘q"}
-        </Badge>
-      </div>
-
-      {finalUrl ? (
-        <div className="overflow-hidden rounded-xl border bg-muted/30">
-          {finalUrl.toLowerCase().endsWith(".pdf") ? (
-            <iframe
-              src={finalUrl}
-              className="h-80 w-full"
-              title={title}
-            />
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={finalUrl}
-              alt={title}
-              className="max-h-80 w-full object-contain"
-            />
-          )}
-        </div>
-      ) : (
-        <div className="flex aspect-video items-center justify-center rounded-xl border bg-muted/30 text-xs text-muted-foreground">
-          {hint}
-        </div>
-      )}
-
-      <div className="text-xs text-muted-foreground">
-        {finalOpenUrl ? (
-          <a
-            href={finalOpenUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="text-blue-600 hover:underline"
-          >
-            Asl faylni alohida oynada ochish
-          </a>
-        ) : (
-          hint
-        )}
-      </div>
-    </div>
-  );
-}
-
 function AttemptSummary({ label, attempt }: { label: string; attempt: ResultRead | null }) {
   return (
     <div className="rounded-xl border bg-muted/20 p-3">
@@ -199,71 +128,7 @@ function AttemptDetail({ attempt, attemptNumber }: { attempt: ResultRead; attemp
         <Badge variant="outline">Sana: {formatDate(attempt.created_at)}</Badge>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <PreviewBox
-          title={`Talaba chizmasi (${attemptNumber}-urinish)`}
-          url={
-            attempt.uploaded_preview_url ??
-            attempt.uploaded_file_url
-          }
-          openUrl={attempt.uploaded_file_url}
-          hint="Talaba yuklagan fayl ko‘rinmayapti."
-        />
-        <PreviewBox
-          title="AI overlay natijasi"
-          url={attempt.overlay_url}
-          hint="AI overlay fayli mavjud emas."
-        />
-      </div>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">AI baholash jadvali</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Mezon</TableHead>
-                <TableHead>Izoh</TableHead>
-                <TableHead className="text-right">Ball</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {attempt.table_json?.length ? (
-                attempt.table_json.map((row, rowIndex) => (
-                  <TableRow key={rowIndex}>
-                    <TableCell>{safeCell(row.criterion ?? row.name ?? row.title ?? `Mezon ${rowIndex + 1}`)}</TableCell>
-                    <TableCell>{safeCell(row.comment ?? row.status ?? row.note ?? row.description)}</TableCell>
-                    <TableCell className="text-right">
-                      {safeCell(row.score ?? row.ball ?? row.points)}
-                      {row.max_score || row.max_ball ? `/${safeCell(row.max_score ?? row.max_ball)}` : ""}
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell>Jami</TableCell>
-                  <TableCell>AI umumiy natijasi</TableCell>
-                  <TableCell className="text-right font-medium">{scoreText(attempt.total_score)}/100</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {attempt.status === "failed" && attempt.ai_json_result ? (
-        <>
-          <Separator />
-          <div className="space-y-2">
-            <div className="text-sm font-medium">Xatolik tafsiloti</div>
-            <pre className="max-h-60 overflow-auto rounded-xl border bg-muted/30 p-3 text-xs">
-              {JSON.stringify(attempt.ai_json_result, null, 2)}
-            </pre>
-          </div>
-        </>
-      ) : null}
+      <DrawingAiResultDiagnostics result={attempt} showReferencePreview={false} />
     </div>
   );
 }
