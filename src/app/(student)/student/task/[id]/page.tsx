@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { getStudentTaskResults } from "@/api/results";
+import { DrawingAiResultDiagnostics } from "@/components/drawing-ai/result-diagnostics";
 import { createSubmission } from "@/api/submissions";
 import { getStudentTaskById } from "@/api/tasks";
 import { PageHeader } from "@/components/shell/page-header";
@@ -14,15 +15,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getFileUrl } from "@/lib/api";
 import { getApiErrorMessage } from "@/lib/error";
 import type { ResultRead, TaskRead } from "@/types/api";
@@ -72,6 +64,30 @@ function statusVariant(status?: string): "default" | "secondary" | "destructive"
   if (status === "failed") return "destructive";
   if (status === "pending") return "secondary";
   return "outline";
+}
+
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function getResultReferencePath(result: ResultRead | null, task: TaskRead | null) {
+  const json = asRecord(result?.ai_json_result) ?? {};
+  const meta = asRecord(json.drawing_ai_v2) ?? {};
+
+  return (
+    asString(task?.reference_file_path) ??
+    asString(json.reference_file) ??
+    asString(json.reference_file_path) ??
+    asString(json.reference_path) ??
+    asString(meta.reference_file)
+  );
 }
 
 function PreviewBox({
@@ -135,82 +151,6 @@ function PreviewBox({
   );
 }
 
-function ScoreTable({ result }: { result: ResultRead | null }) {
-  if (!result) {
-    return (
-      <div className="rounded-xl border bg-muted/20 p-4 text-sm text-muted-foreground">
-        Hali natija mavjud emas.
-      </div>
-    );
-  }
-
-  const rows = result.table_json ?? [];
-
-  if (!rows.length) {
-    return (
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Mezon</TableHead>
-            <TableHead>Izoh</TableHead>
-            <TableHead className="text-right">Ball</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <TableRow>
-            <TableCell>Jami</TableCell>
-            <TableCell>AI umumiy natijasi</TableCell>
-            <TableCell className="text-right font-medium">{scoreText(result.total_score)}</TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-    );
-  }
-
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Mezon</TableHead>
-          <TableHead>Izoh</TableHead>
-          <TableHead className="text-right">Ball</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((row, index) => {
-          const criterion = row.criterion ?? row.name ?? row.title ?? `Mezon ${index + 1}`;
-          const comment = row.comment ?? row.status ?? row.description ?? "—";
-          const score = row.score ?? row.ball ?? "—";
-          const maxScore = row.max_score ?? row.max ?? null;
-
-          return (
-            <TableRow key={index}>
-              <TableCell className="font-medium">{String(criterion)}</TableCell>
-              <TableCell className="text-muted-foreground">{String(comment)}</TableCell>
-              <TableCell className="text-right font-medium">
-                {String(score)}{maxScore ? `/${String(maxScore)}` : ""}
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
-  );
-}
-
-function ErrorBox({ result }: { result: ResultRead | null }) {
-  if (!result || result.status !== "failed") return null;
-
-  return (
-    <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4">
-      <div className="text-sm font-semibold text-destructive">AI baholashda xatolik</div>
-      <pre className="mt-3 max-h-72 overflow-auto rounded-lg bg-background p-3 text-xs">
-        {JSON.stringify(result.ai_json_result ?? {}, null, 2)}
-      </pre>
-    </div>
-  );
-}
-
 export default function StudentTaskDetailPage() {
   const params = useParams<{ id: string }>();
   const taskId = Number(params.id);
@@ -242,6 +182,11 @@ export default function StudentTaskDetailPage() {
   const firstScore = sortedResults.find((item) => item.attempt_number === 1)?.total_score;
   const secondScore = sortedResults.find((item) => item.attempt_number === 2)?.total_score;
   const diff = typeof firstScore === "number" && typeof secondScore === "number" ? Math.round(secondScore - firstScore) : null;
+  const attemptsExhausted = nextAttempt === null;
+  const referencePathForStudent = attemptsExhausted && task?.mode === "etalon"
+    ? getResultReferencePath(activeResult, task)
+    : null;
+  const referenceUrlForStudent = getFileUrl(referencePathForStudent);
 
   async function reload() {
     try {
@@ -422,6 +367,24 @@ export default function StudentTaskDetailPage() {
         </CardContent>
       </Card>
 
+      {referenceUrlForStudent ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Etalon chizma</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="rounded-xl border bg-muted/20 p-4 text-sm text-muted-foreground">
+              2 ta urinish yakunlangani uchun etalon chizmani alohida oynada ko‘rishingiz mumkin.
+            </div>
+            <Button asChild variant="outline">
+              <a href={referenceUrlForStudent} target="_blank" rel="noreferrer">
+                Etalon chizmani alohida oynada ochish
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {sortedResults.length > 0 ? (
         <Card>
           <CardHeader>
@@ -450,75 +413,41 @@ export default function StudentTaskDetailPage() {
               <Badge variant="outline">Sana: {formatDate(activeResult?.created_at)}</Badge>
             </div>
 
-            <Tabs defaultValue="preview">
-              <TabsList className="flex flex-wrap">
-                <TabsTrigger value="preview">Preview</TabsTrigger>
-                <TabsTrigger value="table">Baholash jadvali</TabsTrigger>
-                <TabsTrigger value="attempts">Urinishlar</TabsTrigger>
-                <TabsTrigger value="json">AI JSON</TabsTrigger>
-              </TabsList>
+            <DrawingAiResultDiagnostics result={activeResult} task={task} showReferencePreview={false} />
 
-              <TabsContent value="preview" className="mt-4 space-y-4">
-                <div className="grid gap-4 xl:grid-cols-2">
-                  <PreviewBox
-                    title="Talaba chizmasi"
-                    url={
-                      activeResult?.uploaded_preview_url ??
-                      activeResult?.uploaded_file_url
-                    }
-                    openUrl={activeResult?.uploaded_file_url}
-                    hint="Talaba yuklagan chizma shu yerda ko‘rinadi."
-                  />
-                  <PreviewBox
-                    title="AI overlay natijasi"
-                    url={activeResult?.overlay_url}
-                    hint="AI overlay fayli bo‘lsa, shu yerda ko‘rinadi."
-                  />
-                </div>
-                <ErrorBox result={activeResult} />
-              </TabsContent>
+            <Separator />
 
-              <TabsContent value="table" className="mt-4">
-                <ScoreTable result={activeResult} />
-              </TabsContent>
-
-              <TabsContent value="attempts" className="mt-4 space-y-4">
-                <div className="grid gap-3 md:grid-cols-2">
-                  {sortedResults.map((result) => (
-                    <div key={result.id} className="rounded-xl border p-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="font-semibold">{result.attempt_number}-urinish</div>
-                        <Badge variant={statusVariant(result.status)}>{statusLabel(result.status)}</Badge>
-                      </div>
-                      <div className="mt-3 text-3xl font-bold">{scoreText(result.total_score)}</div>
-                      <div className="mt-2 text-xs text-muted-foreground">{formatDate(result.created_at)}</div>
-                      <Button
-                        className="mt-4 w-full"
-                        variant={activeResult?.id === result.id ? "default" : "outline"}
-                        onClick={() => setActiveAttempt(result.attempt_number)}
-                      >
-                        Shu urinishni ko‘rish
-                      </Button>
+            <div className="space-y-4">
+              <div className="text-sm font-medium">Urinishlar taqqoslanishi</div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {sortedResults.map((result) => (
+                  <div key={result.id} className="rounded-xl border p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="font-semibold">{result.attempt_number}-urinish</div>
+                      <Badge variant={statusVariant(result.status)}>{statusLabel(result.status)}</Badge>
                     </div>
-                  ))}
-                </div>
-
-                {diff !== null ? (
-                  <div className="rounded-xl border bg-muted/20 p-4 text-sm">
-                    <span className="font-medium">1-urinishdan 2-urinishga o‘zgarish:</span>{" "}
-                    <span className={diff >= 0 ? "font-bold text-green-700" : "font-bold text-destructive"}>
-                      {diff > 0 ? `+${diff}` : diff} ball
-                    </span>
+                    <div className="mt-3 text-3xl font-bold">{scoreText(result.total_score)}</div>
+                    <div className="mt-2 text-xs text-muted-foreground">{formatDate(result.created_at)}</div>
+                    <Button
+                      className="mt-4 w-full"
+                      variant={activeResult?.id === result.id ? "default" : "outline"}
+                      onClick={() => setActiveAttempt(result.attempt_number)}
+                    >
+                      Shu urinishni ko‘rish
+                    </Button>
                   </div>
-                ) : null}
-              </TabsContent>
+                ))}
+              </div>
 
-              <TabsContent value="json" className="mt-4">
-                <pre className="max-h-[520px] overflow-auto rounded-xl border bg-muted/20 p-4 text-xs">
-                  {JSON.stringify(activeResult?.ai_json_result ?? {}, null, 2)}
-                </pre>
-              </TabsContent>
-            </Tabs>
+              {diff !== null ? (
+                <div className="rounded-xl border bg-muted/20 p-4 text-sm">
+                  <span className="font-medium">1-urinishdan 2-urinishga o‘zgarish:</span>{" "}
+                  <span className={diff >= 0 ? "font-bold text-green-700" : "font-bold text-destructive"}>
+                    {diff > 0 ? `+${diff}` : diff} ball
+                  </span>
+                </div>
+              ) : null}
+            </div>
 
             <Separator />
             <div className="text-xs text-muted-foreground">
