@@ -131,6 +131,80 @@ export type AnalyticsCriteria = {
   values: Array<number | null>;
 };
 
+export type AnalyticsDescriptiveStats = {
+  count: number;
+  mean: number | null;
+  median: number | null;
+  standard_deviation: number | null;
+  minimum: number | null;
+  maximum: number | null;
+};
+
+export type AnalyticsPrePostStatistics = {
+  paired_count: number;
+  pretest: AnalyticsDescriptiveStats;
+  posttest: AnalyticsDescriptiveStats;
+  difference: AnalyticsDescriptiveStats;
+  mean_difference: number | null;
+  percent_growth: number | null;
+  cohen_dz: number | null;
+  confidence_interval_95_low: number | null;
+  confidence_interval_95_high: number | null;
+  t_value: number | null;
+  degrees_of_freedom: number | null;
+  p_value: number | null;
+  p_value_note: string;
+  interpretation?: string | null;
+};
+
+export type AnalyticsExperimentGroupStats = {
+  group: ExperimentGroup;
+  label: string;
+  student_count: number;
+  paired_count: number;
+  pretest: AnalyticsDescriptiveStats;
+  posttest: AnalyticsDescriptiveStats;
+  mean_growth: number | null;
+  percent_growth: number | null;
+};
+
+export type AnalyticsBetweenGroupStatistics = {
+  experimental_count: number;
+  control_count: number;
+  experimental_growth: number | null;
+  control_growth: number | null;
+  growth_difference: number | null;
+  cohen_d: number | null;
+  t_value: number | null;
+  degrees_of_freedom: number | null;
+  p_value: number | null;
+  p_value_note: string;
+  interpretation?: string | null;
+};
+
+export type AnalyticsRubricProfile = {
+  mode: TaskMode;
+  label: string;
+  labels: string[];
+  values: Array<number | null>;
+};
+
+export type AnalyticsExportRow = {
+  student_id: number;
+  name: string;
+  group_name?: string | null;
+  experiment_group?: ExperimentGroup | null;
+  pretest: number | null;
+  week_1: number | null;
+  week_2: number | null;
+  week_3: number | null;
+  week_4: number | null;
+  posttest: number | null;
+  average: number | null;
+  growth: number | null;
+  success: boolean | null;
+};
+
 export type AnalyticsHeatmapRow = {
   student_id: number;
   name: string;
@@ -164,6 +238,12 @@ export type TeacherAnalyticsRead = {
   mode_comparison: AnalyticsModeComparisonItem[];
   criteria: AnalyticsCriteria;
   heatmap: AnalyticsHeatmapRow[];
+  descriptive_statistics: AnalyticsDescriptiveStats;
+  pre_post_statistics: AnalyticsPrePostStatistics;
+  group_statistics: AnalyticsExperimentGroupStats[];
+  between_group_statistics: AnalyticsBetweenGroupStatistics;
+  rubric_profiles: AnalyticsRubricProfile[];
+  export_rows: AnalyticsExportRow[];
   filters: AnalyticsFilterOptions;
 };
 

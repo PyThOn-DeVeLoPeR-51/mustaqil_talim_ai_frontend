@@ -14,6 +14,7 @@ import {
   ArrowUpRight,
   BarChart3,
   CircleOff,
+  Download,
   Loader2,
   RefreshCw,
   Target,
@@ -65,6 +66,89 @@ function formatSignedScore(value: number | null) {
   return `${value >= 0 ? "+" : ""}${value.toFixed(1)}`;
 }
 
+function formatPercent(value: number | null) {
+  if (value === null) return "—";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function formatPValue(value: number | null) {
+  if (value === null) return "—";
+  if (value < 0.001) return "<0.001";
+  return value.toFixed(3);
+}
+
+function stageLabel(value: string) {
+  if (value === "pretest") return "Boshlang‘ich";
+  if (value === "intermediate") return "Oraliq";
+  if (value === "posttest") return "Yakuniy";
+  return value;
+}
+
+function experimentGroupLabel(value: ExperimentGroup | null | undefined) {
+  if (value === "experimental") return "Tajriba";
+  if (value === "control") return "Nazorat";
+  return "—";
+}
+
+function csvCell(value: unknown) {
+  if (value === null || value === undefined) return "";
+  const text = String(value).replace(/"/g, '""');
+  return `"${text}"`;
+}
+
+function exportRowsAsCsv(rows: TeacherAnalyticsRead["export_rows"]) {
+  const headers = [
+    "Talaba ID",
+    "F.I.Sh.",
+    "Guruh",
+    "Tajriba turi",
+    "Boshlang‘ich",
+    "1-hafta",
+    "2-hafta",
+    "3-hafta",
+    "4-hafta",
+    "Yakuniy",
+    "O‘rtacha",
+    "O‘sish",
+    "Muvaffaqiyat",
+  ];
+
+  const csv = [
+    headers.map(csvCell).join(","),
+    ...rows.map((row) =>
+      [
+        row.student_id,
+        row.name,
+        row.group_name ?? "",
+        experimentGroupLabel(row.experiment_group),
+        row.pretest,
+        row.week_1,
+        row.week_2,
+        row.week_3,
+        row.week_4,
+        row.posttest,
+        row.average,
+        row.growth,
+        row.success === null ? "" : row.success ? "Ha" : "Yo‘q",
+      ]
+        .map(csvCell)
+        .join(","),
+    ),
+  ].join("\n");
+
+  const blob = new Blob([`\uFEFF${csv}`], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "analytics-v2-scientific-export.csv";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 function MetricCard({
   title,
   value,
@@ -109,6 +193,10 @@ export default function AnalyticsPage() {
     "all" | ExperimentGroup
   >("all");
   const [taskMode, setTaskMode] = useState<"all" | TaskMode>("all");
+  const [topic, setTopic] = useState("all");
+  const [weekNumber, setWeekNumber] = useState("all");
+  const [assessmentStage, setAssessmentStage] = useState("all");
+  const [academicPeriod, setAcademicPeriod] = useState("all");
 
   const [analytics, setAnalytics] = useState<TeacherAnalyticsRead | null>(null);
   const [baseline, setBaseline] = useState<TeacherAnalyticsRead | null>(null);
@@ -121,7 +209,11 @@ export default function AnalyticsPage() {
     group !== "all" ||
     studentId !== "all" ||
     experimentType !== "all" ||
-    taskMode !== "all";
+    taskMode !== "all" ||
+    topic !== "all" ||
+    weekNumber !== "all" ||
+    assessmentStage !== "all" ||
+    academicPeriod !== "all";
 
   const requestParams = useMemo<TeacherAnalyticsParams>(() => {
     const params: TeacherAnalyticsParams = {};
@@ -132,9 +224,24 @@ export default function AnalyticsPage() {
       params.experiment_group = experimentType;
     }
     if (taskMode !== "all") params.mode = taskMode;
+    if (topic !== "all") params.topic = topic;
+    if (weekNumber !== "all") params.week_number = Number(weekNumber);
+    if (assessmentStage !== "all") {
+      params.assessment_stage = assessmentStage as TeacherAnalyticsParams["assessment_stage"];
+    }
+    if (academicPeriod !== "all") params.academic_period = academicPeriod;
 
     return params;
-  }, [experimentType, group, studentId, taskMode]);
+  }, [
+    academicPeriod,
+    assessmentStage,
+    experimentType,
+    group,
+    studentId,
+    taskMode,
+    topic,
+    weekNumber,
+  ]);
 
   const loadAnalytics = useCallback(async () => {
     const requestId = requestIdRef.current + 1;
@@ -211,9 +318,21 @@ export default function AnalyticsPage() {
     if (experimentType === "control") return "Nazorat guruhi";
     if (taskMode === "etalon") return "Etalon topshiriqlar";
     if (taskMode === "optional") return "Ixtiyoriy topshiriqlar";
+    if (topic !== "all") return `${topic} mavzusi`;
+    if (assessmentStage !== "all") return `${stageLabel(assessmentStage)} bosqichi`;
+    if (academicPeriod !== "all") return `${academicPeriod} davri`;
 
     return "Barcha talabalar";
-  }, [experimentType, group, studentId, studentOptions, taskMode]);
+  }, [
+    academicPeriod,
+    assessmentStage,
+    experimentType,
+    group,
+    studentId,
+    studentOptions,
+    taskMode,
+    topic,
+  ]);
 
   function updateGroup(nextGroup: string) {
     setGroup(nextGroup);
@@ -257,6 +376,10 @@ export default function AnalyticsPage() {
     setStudentId("all");
     setExperimentType("all");
     setTaskMode("all");
+    setTopic("all");
+    setWeekNumber("all");
+    setAssessmentStage("all");
+    setAcademicPeriod("all");
   }
 
   if (loading && !analytics) {
@@ -336,7 +459,8 @@ export default function AnalyticsPage() {
           </div>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
             O‘qituvchi faqat o‘zi biriktirgan talabalar natijalarini guruh,
-            talaba, tajriba turi va topshiriq rejimi bo‘yicha tahlil qiladi.
+            talaba, tajriba turi, topshiriq rejimi, mavzu, hafta, baholash
+            bosqichi va akademik davr bo‘yicha tahlil qiladi.
           </p>
         </div>
         <Button type="button" variant="outline" onClick={resetFilters}>
@@ -431,6 +555,70 @@ export default function AnalyticsPage() {
               <option value="optional">Ixtiyoriy</option>
             </select>
           </label>
+
+          <label className="space-y-2 text-sm font-medium">
+            <span>Mavzu</span>
+            <select
+              className={selectClass}
+              value={topic}
+              onChange={(event) => setTopic(event.target.value)}
+            >
+              <option value="all">Barcha mavzular</option>
+              {filters.topics.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="space-y-2 text-sm font-medium">
+            <span>Hafta</span>
+            <select
+              className={selectClass}
+              value={weekNumber}
+              onChange={(event) => setWeekNumber(event.target.value)}
+            >
+              <option value="all">Barcha haftalar</option>
+              {filters.week_numbers.map((item) => (
+                <option key={item} value={String(item)}>
+                  {item}-hafta
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="space-y-2 text-sm font-medium">
+            <span>Baholash bosqichi</span>
+            <select
+              className={selectClass}
+              value={assessmentStage}
+              onChange={(event) => setAssessmentStage(event.target.value)}
+            >
+              <option value="all">Barcha bosqichlar</option>
+              {filters.assessment_stages.map((item) => (
+                <option key={item} value={item}>
+                  {stageLabel(item)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="space-y-2 text-sm font-medium">
+            <span>Akademik davr</span>
+            <select
+              className={selectClass}
+              value={academicPeriod}
+              onChange={(event) => setAcademicPeriod(event.target.value)}
+            >
+              <option value="all">Barcha davrlar</option>
+              {filters.academic_periods.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </label>
         </CardContent>
       </Card>
 
@@ -501,6 +689,223 @@ export default function AnalyticsPage() {
               icon={<BarChart3 className="h-4 w-4" />}
               positive={successPositive}
             />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              title="Median"
+              value={formatScore(analytics.descriptive_statistics.median, "/100")}
+              hint={`N=${analytics.descriptive_statistics.count}; SD=${formatScore(analytics.descriptive_statistics.standard_deviation)}`}
+              icon={<BarChart3 className="h-4 w-4" />}
+            />
+            <MetricCard
+              title="Min / Max"
+              value={`${formatScore(analytics.descriptive_statistics.minimum)} / ${formatScore(analytics.descriptive_statistics.maximum)}`}
+              hint="Talabalar o‘rtacha natijasi oralig‘i"
+              icon={<Target className="h-4 w-4" />}
+            />
+            <MetricCard
+              title="Pretest-posttest"
+              value={formatSignedScore(analytics.pre_post_statistics.mean_difference)}
+              hint={`Juft talabalar: ${analytics.pre_post_statistics.paired_count}; o‘sish: ${formatPercent(analytics.pre_post_statistics.percent_growth)}`}
+              icon={<TrendingUp className="h-4 w-4" />}
+              positive={
+                analytics.pre_post_statistics.mean_difference === null
+                  ? undefined
+                  : analytics.pre_post_statistics.mean_difference >= 0
+              }
+            />
+            <MetricCard
+              title="Cohen’s dz / p"
+              value={`${formatScore(analytics.pre_post_statistics.cohen_dz)} / ${formatPValue(analytics.pre_post_statistics.p_value)}`}
+              hint="Juftlangan t-test uchun ilmiy indikator"
+              icon={<BarChart3 className="h-4 w-4" />}
+            />
+          </div>
+
+          <div className="grid gap-6 2xl:grid-cols-2">
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Ilmiy-statistik jadval
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Pretest va posttest juft natijalari bo‘yicha mean, median,
+                  SD, min/max, Cohen’s dz, 95% ishonch oralig‘i va p-value.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4 overflow-x-auto">
+                <table className="w-full min-w-[620px] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="py-2 pr-4 font-medium">Ko‘rsatkich</th>
+                      <th className="py-2 pr-4 font-medium">Boshlang‘ich</th>
+                      <th className="py-2 pr-4 font-medium">Yakuniy</th>
+                      <th className="py-2 pr-4 font-medium">Farq</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      [
+                        "N",
+                        analytics.pre_post_statistics.pretest.count,
+                        analytics.pre_post_statistics.posttest.count,
+                        analytics.pre_post_statistics.difference.count,
+                      ],
+                      [
+                        "Mean",
+                        formatScore(analytics.pre_post_statistics.pretest.mean),
+                        formatScore(analytics.pre_post_statistics.posttest.mean),
+                        formatSignedScore(analytics.pre_post_statistics.mean_difference),
+                      ],
+                      [
+                        "Median",
+                        formatScore(analytics.pre_post_statistics.pretest.median),
+                        formatScore(analytics.pre_post_statistics.posttest.median),
+                        formatScore(analytics.pre_post_statistics.difference.median),
+                      ],
+                      [
+                        "SD",
+                        formatScore(analytics.pre_post_statistics.pretest.standard_deviation),
+                        formatScore(analytics.pre_post_statistics.posttest.standard_deviation),
+                        formatScore(analytics.pre_post_statistics.difference.standard_deviation),
+                      ],
+                      [
+                        "Min / Max",
+                        `${formatScore(analytics.pre_post_statistics.pretest.minimum)} / ${formatScore(analytics.pre_post_statistics.pretest.maximum)}`,
+                        `${formatScore(analytics.pre_post_statistics.posttest.minimum)} / ${formatScore(analytics.pre_post_statistics.posttest.maximum)}`,
+                        `${formatScore(analytics.pre_post_statistics.difference.minimum)} / ${formatScore(analytics.pre_post_statistics.difference.maximum)}`,
+                      ],
+                    ].map((row) => (
+                      <tr key={row[0]} className="border-b last:border-0">
+                        <td className="py-2 pr-4 font-medium">{row[0]}</td>
+                        <td className="py-2 pr-4">{row[1]}</td>
+                        <td className="py-2 pr-4">{row[2]}</td>
+                        <td className="py-2 pr-4">{row[3]}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div className="grid gap-3 rounded-xl border bg-muted/20 p-4 text-sm md:grid-cols-2">
+                  <div>
+                    <span className="text-muted-foreground">95% ishonch oralig‘i: </span>
+                    <strong>
+                      {formatScore(
+                        analytics.pre_post_statistics.confidence_interval_95_low,
+                      )}
+                      {" — "}
+                      {formatScore(
+                        analytics.pre_post_statistics.confidence_interval_95_high,
+                      )}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">t(df): </span>
+                    <strong>
+                      {formatScore(analytics.pre_post_statistics.t_value)}
+                      {analytics.pre_post_statistics.degrees_of_freedom === null
+                        ? ""
+                        : ` (${analytics.pre_post_statistics.degrees_of_freedom})`}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">p-value: </span>
+                    <strong>
+                      {formatPValue(analytics.pre_post_statistics.p_value)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Cohen’s dz: </span>
+                    <strong>
+                      {formatScore(analytics.pre_post_statistics.cohen_dz)}
+                    </strong>
+                  </div>
+                </div>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  {analytics.pre_post_statistics.p_value_note}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base">
+                  Tajriba va nazorat guruhi statistikasi
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Har bir guruh bo‘yicha pretest-posttest o‘sishi va guruhlar
+                  o‘rtasidagi farq.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4 overflow-x-auto">
+                <table className="w-full min-w-[640px] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="py-2 pr-4 font-medium">Guruh</th>
+                      <th className="py-2 pr-4 font-medium">Talaba</th>
+                      <th className="py-2 pr-4 font-medium">Juft N</th>
+                      <th className="py-2 pr-4 font-medium">Boshlang‘ich</th>
+                      <th className="py-2 pr-4 font-medium">Yakuniy</th>
+                      <th className="py-2 pr-4 font-medium">O‘sish</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {analytics.group_statistics.map((item) => (
+                      <tr key={item.group} className="border-b last:border-0">
+                        <td className="py-2 pr-4 font-medium">{item.label}</td>
+                        <td className="py-2 pr-4">{item.student_count}</td>
+                        <td className="py-2 pr-4">{item.paired_count}</td>
+                        <td className="py-2 pr-4">{formatScore(item.pretest.mean)}</td>
+                        <td className="py-2 pr-4">{formatScore(item.posttest.mean)}</td>
+                        <td className="py-2 pr-4">
+                          {formatSignedScore(item.mean_growth)}
+                          <span className="ml-1 text-xs text-muted-foreground">
+                            ({formatPercent(item.percent_growth)})
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div className="grid gap-3 rounded-xl border bg-muted/20 p-4 text-sm md:grid-cols-2">
+                  <div>
+                    <span className="text-muted-foreground">O‘sish farqi: </span>
+                    <strong>
+                      {formatSignedScore(
+                        analytics.between_group_statistics.growth_difference,
+                      )}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Cohen’s d: </span>
+                    <strong>
+                      {formatScore(analytics.between_group_statistics.cohen_d)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">t(df): </span>
+                    <strong>
+                      {formatScore(analytics.between_group_statistics.t_value)}
+                      {analytics.between_group_statistics.degrees_of_freedom ===
+                      null
+                        ? ""
+                        : ` (${formatScore(analytics.between_group_statistics.degrees_of_freedom)})`}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">p-value: </span>
+                    <strong>
+                      {formatPValue(analytics.between_group_statistics.p_value)}
+                    </strong>
+                  </div>
+                </div>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  {analytics.between_group_statistics.p_value_note}
+                </p>
+              </CardContent>
+            </Card>
           </div>
 
           <ChartCard
@@ -614,6 +1019,54 @@ export default function AnalyticsPage() {
             </Card>
           </div>
 
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base">
+                Rejimlar bo‘yicha rubrika profili
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Etalon va ixtiyoriy rejimlar rubrikasi alohida ko‘rsatiladi.
+                Qiymatlar har bir mezon bo‘yicha 100 foizlik shkalaga
+                normalizatsiya qilingan o‘rtacha natijadir.
+              </p>
+            </CardHeader>
+            <CardContent className="grid gap-4 lg:grid-cols-2">
+              {analytics.rubric_profiles.map((profile) => (
+                <div key={profile.mode} className="rounded-xl border p-4">
+                  <h3 className="font-semibold">{profile.label}</h3>
+                  {profile.labels.length ? (
+                    <div className="mt-3 space-y-3">
+                      {profile.labels.map((label, index) => {
+                        const value = profile.values[index];
+
+                        return (
+                          <div key={label} className="space-y-1">
+                            <div className="flex items-center justify-between gap-3 text-sm">
+                              <span className="truncate">{label}</span>
+                              <strong>{formatScore(value, "%")}</strong>
+                            </div>
+                            <div className="h-2 overflow-hidden rounded-full bg-muted">
+                              <div
+                                className="h-full rounded-full bg-primary"
+                                style={{
+                                  width: `${Math.max(0, Math.min(100, value ?? 0))}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      Bu rejim bo‘yicha rubrika ma’lumoti hali mavjud emas.
+                    </p>
+                  )}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
           <ChartCard
             title="Talabalar kesimidagi natijalar xaritasi"
             description="Ma’lumot mavjud bo‘lmagan kataklar chiziqcha bilan ko‘rsatiladi; bu 0 ball degani emas."
@@ -626,6 +1079,73 @@ export default function AnalyticsPage() {
               columns={progress.labels}
             />
           </ChartCard>
+
+          <Card className="shadow-sm">
+            <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <CardTitle className="text-base">
+                  Maqola va komissiya uchun eksport jadvali
+                </CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Har bir talaba bo‘yicha pretest, haftalik natijalar, posttest,
+                  o‘rtacha ball va o‘sish. CSV faylni Excel, Jamovi, SPSS yoki R
+                  dasturlarida ochish mumkin.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => exportRowsAsCsv(analytics.export_rows)}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                CSV export
+              </Button>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              <table className="w-full min-w-[900px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="py-2 pr-4 font-medium">Talaba</th>
+                    <th className="py-2 pr-4 font-medium">Guruh</th>
+                    <th className="py-2 pr-4 font-medium">Tajriba turi</th>
+                    <th className="py-2 pr-4 font-medium">Boshlang‘ich</th>
+                    <th className="py-2 pr-4 font-medium">1-hafta</th>
+                    <th className="py-2 pr-4 font-medium">2-hafta</th>
+                    <th className="py-2 pr-4 font-medium">3-hafta</th>
+                    <th className="py-2 pr-4 font-medium">4-hafta</th>
+                    <th className="py-2 pr-4 font-medium">Yakuniy</th>
+                    <th className="py-2 pr-4 font-medium">O‘rtacha</th>
+                    <th className="py-2 pr-4 font-medium">O‘sish</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {analytics.export_rows.slice(0, 30).map((row) => (
+                    <tr key={row.student_id} className="border-b last:border-0">
+                      <td className="py-2 pr-4 font-medium">{row.name}</td>
+                      <td className="py-2 pr-4">{row.group_name ?? "—"}</td>
+                      <td className="py-2 pr-4">
+                        {experimentGroupLabel(row.experiment_group)}
+                      </td>
+                      <td className="py-2 pr-4">{formatScore(row.pretest)}</td>
+                      <td className="py-2 pr-4">{formatScore(row.week_1)}</td>
+                      <td className="py-2 pr-4">{formatScore(row.week_2)}</td>
+                      <td className="py-2 pr-4">{formatScore(row.week_3)}</td>
+                      <td className="py-2 pr-4">{formatScore(row.week_4)}</td>
+                      <td className="py-2 pr-4">{formatScore(row.posttest)}</td>
+                      <td className="py-2 pr-4">{formatScore(row.average)}</td>
+                      <td className="py-2 pr-4">{formatSignedScore(row.growth)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {analytics.export_rows.length > 30 ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Jadvalda dastlabki 30 ta qator ko‘rsatildi. To‘liq ma’lumot
+                  CSV export faylida mavjud.
+                </p>
+              ) : null}
+            </CardContent>
+          </Card>
         </>
       )}
     </div>
