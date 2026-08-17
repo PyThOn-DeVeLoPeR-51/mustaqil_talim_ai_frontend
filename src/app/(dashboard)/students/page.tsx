@@ -640,6 +640,9 @@ export default function StudentsPage() {
                       <option value="control">Nazorat guruhi</option>
                     </select>
                     <p className="text-xs text-muted-foreground">
+                      Tajriba guruhi AI Mentor’dan foydalanadi; nazorat guruhida AI Mentor yopiq bo‘ladi.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
                       Analytics guruh va tajriba turi bo‘yicha to‘g‘ri ishlashi
                       uchun ushbu maydonlar to‘ldiriladi.
                     </p>
@@ -851,10 +854,13 @@ export default function StudentsPage() {
                   })
                 }
               >
-                <option value="">Belgilanmagan</option>
+                <option value="">Belgilanmagan (AI Mentor yopiq)</option>
                 <option value="experimental">Tajriba guruhi</option>
                 <option value="control">Nazorat guruhi</option>
               </select>
+              <p className="text-xs text-muted-foreground">
+                AI Mentor faqat “Tajriba guruhi” tanlanganda ochiladi. Nazorat yoki belgilanmagan holatda yopiq.
+              </p>
             </div>
             <label className="flex items-center gap-2 rounded-lg border p-3 text-sm">
               <input

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Bot, ClipboardList, Home } from "lucide-react";
+import { Bot, ClipboardList, Home, ShieldX } from "lucide-react";
 
 import { getStudentMe } from "@/api/auth";
 import { StudentGuard } from "@/components/guards/StudentGuard";
@@ -24,16 +24,33 @@ const studentNav = [
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [me, setMe] = useState<Student | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+
+  const isMentorRoute =
+    pathname === "/student/mentor" || pathname.startsWith("/student/mentor/");
+  const canUseAIMentor = me?.experiment_group === "experimental";
+  const visibleStudentNav = studentNav.filter(
+    (item) => item.href !== "/student/mentor" || canUseAIMentor,
+  );
 
   useEffect(() => {
     async function loadMe() {
       const token = getStudentToken();
-      if (!token) return;
-      const data = await getStudentMe(token);
-      setMe(data);
+      if (!token) {
+        setProfileLoaded(true);
+        return;
+      }
+      try {
+        const data = await getStudentMe(token);
+        setMe(data);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setProfileLoaded(true);
+      }
     }
 
-    loadMe().catch(console.error);
+    void loadMe();
   }, []);
 
   return (
@@ -69,7 +86,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             </div>
 
             <div className="flex shrink-0 flex-wrap items-center gap-2">
-              {studentNav.map((item) => {
+              {visibleStudentNav.map((item) => {
                 const Icon = item.icon;
                 const active = pathname === item.href || (item.href !== "/student" && pathname.startsWith(`${item.href}/`));
                 return (
@@ -86,7 +103,28 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
           </div>
         </header>
 
-        <main className={cn("mx-auto max-w-7xl px-4 py-6", pathname === "/student/mentor" && "max-w-[1500px]")}>{children}</main>
+        <main
+          className={cn(
+            "mx-auto max-w-7xl px-4 py-6",
+            isMentorRoute && canUseAIMentor && "max-w-[1500px]",
+          )}
+        >
+          {isMentorRoute && !profileLoaded ? (
+            <div className="rounded-lg border bg-background p-6 text-sm text-muted-foreground">
+              AI Mentor uchun ruxsat tekshirilmoqda...
+            </div>
+          ) : isMentorRoute && !canUseAIMentor ? (
+            <div className="mx-auto max-w-xl rounded-xl border bg-background p-8 text-center shadow-sm">
+              <ShieldX className="mx-auto h-10 w-10 text-muted-foreground" />
+              <h1 className="mt-4 text-xl font-semibold">AI Mentor mavjud emas</h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Ushbu bo‘lim faqat tajriba guruhi talabalari uchun mavjud.
+              </p>
+            </div>
+          ) : (
+            children
+          )}
+        </main>
       </div>
     </StudentGuard>
   );
